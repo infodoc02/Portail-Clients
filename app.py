@@ -14,7 +14,7 @@ from static.styles import get_main_css
 from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
-st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="💻", layout="wide", initial_sidebar_state="collapsed")
 
 # ===== تهيئة =====
 def init_session():
@@ -230,7 +230,7 @@ def render_accueil():
             <span>📱 0798 66 19 00</span>
             <span>📍 الشلف - حي بن سونة بجانب المسبح</span>
             <span>🕐 8:00 - 17:00 (السبت - الخميس)</span>
-            <span>👥 {total_visits} زوار المنصة</span>
+            <span>👥 {total_visits} :زوار المنصة</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
