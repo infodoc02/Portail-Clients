@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (بطيئة جداً وتبدأ فوراً) =====
+        # ===== إعلانات متحركة (بدء فوري مع تحسينات) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -241,7 +241,7 @@ def render_accueil():
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
-                # رسوم CSS للحركة البطيئة من اليسار إلى اليمين
+                # رسوم CSS للحركة الفورية من اليسار إلى اليمين
                 ann_html = f'''
                 <style>
                 @keyframes scroll {{
@@ -259,15 +259,17 @@ def render_accueil():
                 }}
                 .marquee-content {{
                     display: inline-block;
-                    animation: scroll 60s linear infinite; /* أبطأ بكثير */
-                    animation-delay: 0s; /* يبدأ فوراً */
+                    animation: scroll 60s linear infinite;
+                    animation-play-state: running;
+                    will-change: transform;
                     color: {text_c};
                     font-weight: bold;
                     font-size: 1rem;
                     white-space: nowrap;
+                    transform: translateZ(0); /* تسريع الأجهزة */
                 }}
                 .marquee-content span {{
-                    margin: 0 60px; /* مسافة مناسبة */
+                    margin: 0 60px;
                 }}
                 </style>
                 <div class="marquee-container">
