@@ -154,19 +154,18 @@ def render_login():
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"
                 st.rerun()
-# ===== الصفحة الرئيسية (مصححة بدون تكرار) =====
-# ===== الصفحة الرئيسية (نسخة احترافية كاملة) =====
+# ===== الصفحة الرئيسية (شريط علوي محسّن) =====
 def render_accueil():
     db = get_db()
 
-    # ===== الهيرو الصغير مع الأيقونة =====
+    # ===== تحضير الأيقونة =====
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ico.ico")
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_b64 = base64.b64encode(f.read()).decode()
-        logo_html = f'<img src="data:image/x-icon;base64,{logo_b64}" style="width:50px;height:50px;vertical-align:middle;margin-left:10px;">'
+        logo_img = f'<img src="data:image/x-icon;base64,{logo_b64}" style="width:45px;height:45px;vertical-align:middle;">'
     else:
-        logo_html = '<span style="font-size:2.5rem;">💻</span>'
+        logo_img = '<span style="font-size:2.5rem;">💻</span>'
 
     # حالة المحل
     try:
@@ -176,34 +175,40 @@ def render_accueil():
         is_open = True
 
     if is_open:
-        status_badge = '<span style="background:#22c55e;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;">🟢 مفتوح</span>'
+        status_badge = '<span style="background:#22c55e;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;">🟢 مفتوح</span>'
     else:
-        status_badge = '<span style="background:#ef4444;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
+        status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
+    # ===== الشريط العلوي المحسّن (الأيقونة والاسم في الوسط) =====
     st.markdown(f"""
-    <style>@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
-    <div style="display:flex;align-items:center;justify-content:space-between;
-                background:rgba(30,58,138,0.5);backdrop-filter:blur(15px);
+    <style>
+    @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.5}} }}
+    </style>
+    <div style="background:rgba(30,58,138,0.55);backdrop-filter:blur(15px);
                 -webkit-backdrop-filter:blur(15px);
-                border:1px solid rgba(255,255,255,0.15);
-                padding:15px 20px;border-radius:15px;margin-bottom:15px;color:white;">
-        <div style="display:flex;align-items:center;gap:12px;">
-            {logo_html}
-            <div>
-                <h2 style="margin:0;font-size:1.5rem;font-weight:900;">InfoDoc</h2>
-                <p style="margin:0;font-size:0.8rem;opacity:0.9;">ورشة صيانة الحواسيب</p>
+                border:1px solid rgba(255,255,255,0.2);
+                border-radius:20px;padding:20px 15px;margin-bottom:20px;color:white;">
+        <!-- الصف الأول: الأيقونة + الاسم + حالة المحل -->
+        <div style="display:flex;align-items:center;justify-content:center;gap:15px;flex-wrap:wrap;margin-bottom:12px;">
+            {logo_img}
+            <div style="text-align:center;">
+                <h1 style="margin:0;font-size:2rem;font-weight:900;color:white;">InfoDoc</h1>
+                <p style="margin:2px 0 0 0;font-size:0.9rem;opacity:0.9;color:white;">ورشة صيانة الحواسيب المحترفة</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                {status_badge}
             </div>
         </div>
-        <div style="text-align:right;">
-            {status_badge}
-            <div style="margin-top:5px;font-size:0.75rem;opacity:0.8;">
-                <span>📱 0798 66 19 00</span> | <span>📍 الشلف - تنس</span>
-            </div>
+        <!-- الصف الثاني: معلومات التواصل -->
+        <div style="display:flex;justify-content:center;gap:30px;flex-wrap:wrap;font-size:0.9rem;opacity:0.85;">
+            <span>📱 0798 66 19 00</span>
+            <span>📍 الشلف - تنس</span>
+            <span>🕐 8:00 - 17:00 (السبت - الخميس)</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # التبويبات
+    # ===== باقي الصفحة (التبويبات، الإعلانات، العروض، الخدمات) =====
     tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
 
     with tab1:
@@ -259,7 +264,7 @@ def render_accueil():
                         @keyframes pulse-badge {{ 0%,100%{{transform:scale(1)}} 50%{{transform:scale(1.08)}} }}
                         </style>""", unsafe_allow_html=True)
         else:
-            # عروض افتراضية (ثابتة)
+            # عروض افتراضية
             st.markdown("### 🎉 عروض خاصة")
             o1, o2 = st.columns(2)
             with o1:
@@ -300,7 +305,6 @@ def render_accueil():
                         <span style="font-size:1.3rem;">{icon}</span>
                         <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
                         <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
-
 # ===== التسجيل =====
 def render_register():
     st.markdown("### ✨ إنشاء حساب جديد")
