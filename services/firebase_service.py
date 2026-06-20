@@ -199,6 +199,15 @@ class FirebaseService:
         except:
             pass
 
+    def increment_total_visitors(self):
+        """زيادة عداد الزوار الإجمالي (يُستدعى مع كل تحميل للصفحة)"""
+        if not self.is_connected:
+            return
+        try:
+            ref = self.get_reference("stats/total_visitors")
+            ref.transaction(lambda current: (current or 0) + 1)
+        except Exception:
+            pass
 
 @st.cache_resource
 def get_firebase_service() -> FirebaseService:
