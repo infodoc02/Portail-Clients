@@ -32,67 +32,12 @@ def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
     
-    # ✅ تتبع الزائر
+    # ✅ تتبع الزائر (هذا يكفي)
     try:
-        from services.visitor_tracker import init_visitor_tracking, get_visitor_stats
+        from services.visitor_tracker import init_visitor_tracking
         init_visitor_tracking()
-        
-        # 🎉 نافذة ترحيبية (تظهر مرة واحدة فقط)
-        if not st.session_state.get("welcome_shown"):
-            stats = get_visitor_stats()
-            total_visits = stats["total_visits"] if stats else 0
-            
-            st.markdown(f"""
-            <style>
-                .welcome-overlay {{
-                    position: fixed;
-                    top: 0; left: 0;
-                    width: 100%; height: 100%;
-                    background: rgba(0, 0, 0, 0.7);
-                    z-index: 9999;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    animation: fadeOut 4s forwards;
-                }}
-                @keyframes fadeOut {{
-                    0% {{ opacity: 1; }}
-                    80% {{ opacity: 1; }}
-                    100% {{ opacity: 0; visibility: hidden; }}
-                }}
-                .welcome-card {{
-                    background: white;
-                    padding: 40px;
-                    border-radius: 20px;
-                    text-align: center;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                    animation: scaleIn 0.5s ease;
-                }}
-                @keyframes scaleIn {{
-                    0% {{ transform: scale(0.5); opacity: 0; }}
-                    100% {{ transform: scale(1); opacity: 1; }}
-                }}
-            </style>
-            <div class="welcome-overlay" onclick="this.style.display='none'">
-                <div class="welcome-card">
-                    <h2 style="font-family: 'Cairo', sans-serif; color: #1e293b;">👋 مرحباً بك في InfoDoc</h2>
-                    <p style="font-size: 1.5rem; color: #334155;">
-                        📊 إجمالي زوار المنصة: <strong style="color: #2563eb;">{total_visits}</strong>
-                    </p>
-                    <p style="color: #94a3b8; font-size: 0.9rem;">(اضغط للمتابعة أو ستغلق تلقائياً)</p>
-                </div>
-            </div>
-            <script>
-                setTimeout(function(){{
-                    var overlay = document.querySelector('.welcome-overlay');
-                    if(overlay) overlay.style.display = 'none';
-                }}, 4000);
-            </script>
-            """, unsafe_allow_html=True)
-            
-            st.session_state.welcome_shown = True
     except ImportError:
-        st.warning("⚠️ نظام تتبع الزوار غير متاح حالياً.")
+        pass  # لا شيء، فقط نتجاهل إذا لم يكن الملف موجوداً
     
     if not get_db().is_connected:
         st.error("❌ تعذر الاتصال"); st.stop()
@@ -227,6 +172,7 @@ def render_login():
                 st.session_state["page"] = "accueil"
                 st.rerun()
 # ===== الصفحة الرئيسية (نسخة كاملة ومحدثة) =====
+# ===== الصفحة الرئيسية (نسخة كاملة مع عدد الزوار في الشريط) =====
 def render_accueil():
     db = get_db()
 
@@ -251,6 +197,14 @@ def render_accueil():
     else:
         status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
+    # جلب عدد الزوار
+    try:
+        from services.visitor_tracker import get_visitor_stats
+        stats = get_visitor_stats()
+        total_visits = stats.get("total_visits", 0) if stats else 0
+    except:
+        total_visits = 0
+
     # ===== الشريط العلوي المحسّن (الأيقونة والاسم في الوسط) =====
     st.markdown(f"""
     <style>
@@ -265,17 +219,18 @@ def render_accueil():
             {logo_img}
             <div style="text-align:center;">
                 <h1 style="margin:0;font-size:2rem;font-weight:900;color:white;">InfoDoc</h1>
-                <p style="margin:2px 0 0 0;font-size:0.9rem;opacity:0.9;color:white;">ورشة صيانة الحواسيب المحترفة</p>
+                <p style="margin:2px 0 0 0;font-size:0.9rem;opacity:0.9;color:white;"> عيادة الإعلام الآلي - بيع، صيانة محترفة وخدمات</p>
             </div>
             <div style="display:flex;align-items:center;gap:10px;">
                 {status_badge}
             </div>
         </div>
-        <!-- الصف الثاني: معلومات التواصل -->
+        <!-- الصف الثاني: معلومات التواصل + عدد الزوار -->
         <div style="display:flex;justify-content:center;gap:30px;flex-wrap:wrap;font-size:0.9rem;opacity:0.85;">
             <span>📱 0798 66 19 00</span>
-            <span>📍 الشلف - تنس</span>
+            <span>📍 الشلف - حي بن سونة بجانب المسبح</span>
             <span>🕐 8:00 - 17:00 (السبت - الخميس)</span>
+            <span>👥 {total_visits} زوار المنصة</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
