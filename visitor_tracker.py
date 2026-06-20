@@ -10,6 +10,7 @@ import pytz
 import requests
 import hashlib
 from collections import defaultdict
+from config import APP_CONFIG
 
 # ==============================================================================
 # 1. الحصول على IP الزائر
