@@ -1,0 +1,205 @@
+# services/firebase_service.py
+"""
+خدمة Firebase - تستعمل نفس قاعدة بيانات التطبيق الرئيسي
+جداول جديدة: clients, demandes
+"""
+
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, db
+from typing import Optional, Dict, List
+from datetime import datetime
+import pytz
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import APP_CONFIG, FIREBASE_PATHS
+
+
+class FirebaseService:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
+    def __init__(self):
+        if self._initialized:
+            return
+        self.db_url = None
+        self._connect()
+        self._initialized = True
+    
+    def _connect(self) -> bool:
+        try:
+            if not firebase_admin._apps:
+                # ✅ طريقة مضمونة 100% لقراءة المفتاح
+                private_key = st.secrets["firebase"]["private_key"]
+                
+                # إصلاح المفتاح إذا كان فيه \\n
+                if "\\n" in private_key:
+                    private_key = private_key.replace("\\n", "\n")
+                
+                cred_dict = {
+                    "type": st.secrets["firebase"]["type"],
+                    "project_id": st.secrets["firebase"]["project_id"],
+                    "private_key_id": st.secrets["firebase"]["private_key_id"],
+                    "private_key": private_key,
+                    "client_email": st.secrets["firebase"]["client_email"],
+                    "client_id": st.secrets["firebase"]["client_id"],
+                    "auth_uri": st.secrets["firebase"]["auth_uri"],
+                    "token_uri": st.secrets["firebase"]["token_uri"],
+                    "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
+                    "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
+                }
+                
+                cred = credentials.Certificate(cred_dict)
+                self.db_url = st.secrets["DB_URL"]
+                firebase_admin.initialize_app(cred, {'databaseURL': self.db_url})
+            
+            return True
+            
+        except KeyError as e:
+            st.error(f"❌ مفتاح ناقص في secrets.toml: {e}")
+            st.write("المفاتيح المتوفرة:", list(st.secrets.keys()))
+            if "firebase" in st.secrets:
+                st.write("مفاتيح firebase:", list(st.secrets["firebase"].keys()))
+            return False
+        except Exception as e:
+            st.error(f"❌ Erreur connexion Firebase: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            return False
+    
+    @property
+    def is_connected(self) -> bool:
+        return self.db_url is not None and bool(firebase_admin._apps)
+    
+    def get_reference(self, path: str):
+        if not self.is_connected:
+            return None
+        return db.reference(path, url=self.db_url)
+    
+    def get_data(self, path: str) -> Optional[Dict]:
+        if not self.is_connected:
+            return None
+        try:
+            ref = self.get_reference(path)
+            return ref.get() if ref else None
+        except Exception as e:
+            st.error(f"❌ Erreur lecture {path}: {e}")
+            return None
+    
+    def push_data(self, path: str, data: Dict) -> Optional[str]:
+        if not self.is_connected:
+            return None
+        try:
+            ref = self.get_reference(path)
+            if ref:
+                new_ref = ref.push(data)
+                return new_ref.key
+            return None
+        except Exception as e:
+            st.error(f"❌ Erreur ajout {path}: {e}")
+            return None
+    
+    def update_data(self, path: str, data: Dict) -> bool:
+        if not self.is_connected:
+            return False
+        try:
+            ref = self.get_reference(path)
+            if ref:
+                ref.update(data)
+                return True
+            return False
+        except Exception as e:
+            st.error(f"❌ Erreur mise à jour {path}: {e}")
+            return False
+    
+    # ===== دوال خاصة بالبوابة =====
+    
+    def get_client_by_phone(self, phone: str) -> Optional[Dict]:
+        """البحث عن عميل في جدول clients - تطابق تام أو آخر 9 أرقام"""
+        clients = self.get_data(FIREBASE_PATHS["CLIENTS"]) or {}
+        search = str(phone).replace(" ", "").replace(".0", "").strip()
+        
+        for key, val in clients.items():
+            if not val:
+                continue
+            db_phone = str(val.get("phone", "")).replace(" ", "").replace(".0", "").strip()
+            
+            # تطابق تام أو آخر 9 أرقام
+            if db_phone == search or db_phone[-9:] == search[-9:]:
+                val["_id"] = key
+                return val
+        return None
+    
+    def save_client(self, phone: str, name: str, telegram_id: str = "") -> str:
+        """حفظ أو تحديث عميل في جدول clients"""
+        existing = self.get_client_by_phone(phone)
+        if existing and existing.get("_id"):
+            self.update_data(f"{FIREBASE_PATHS['CLIENTS']}/{existing['_id']}", {
+                "name": name,
+                "telegram_id": telegram_id or existing.get("telegram_id", ""),
+                "updated_at": datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")
+            })
+            return existing["_id"]
+        else:
+            return self.push_data(FIREBASE_PATHS["CLIENTS"], {
+                "phone": phone,
+                "name": name,
+                "telegram_id": telegram_id,
+                "created_at": datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")
+            })
+    
+    def get_client_demandes(self, phone: str) -> List[Dict]:
+        """جلب طلبات عميل من جدول demandes"""
+        demandes = self.get_data(FIREBASE_PATHS["DEMANDES"]) or {}
+        result = []
+        search = str(phone).replace(" ", "").strip()[-9:]
+        for key, val in demandes.items():
+            db_phone = str(val.get("phone", "")).replace(" ", "").strip()
+            if db_phone[-9:] == search:
+                val["_id"] = key
+                result.append(val)
+        return result
+    
+    def save_demande(self, data: Dict) -> Optional[str]:
+        """حفظ طلب صيانة جديد"""
+        return self.push_data(FIREBASE_PATHS["DEMANDES"], data)
+    
+    def get_user_devices(self, phone: str) -> List[Dict]:
+        """جلب أجهزة من atelier"""
+        all_data = self.get_data(FIREBASE_PATHS["ATELIER"])
+        devices = []
+        if all_data:
+            search = str(phone).replace(" ", "").strip()[-9:]
+            for key, value in all_data.items():
+                if not value:
+                    continue
+                db_phone = str(value.get("Telephone", "")).replace(" ", "").strip()
+                if db_phone[-9:] == search:
+                    device = dict(value)
+                    device["_id"] = key
+                    devices.append(device)
+        return devices
+    
+    def track_visitor(self):
+        if not self.is_connected:
+            return
+        try:
+            tz = pytz.timezone(APP_CONFIG["TIMEZONE"])
+            today = datetime.now(tz).strftime('%Y-%m-%d')
+            ref = self.get_reference(f"{FIREBASE_PATHS['STATS_VISITORS']}/{today}")
+            if ref:
+                ref.transaction(lambda c: (c or 0) + 1)
+        except:
+            pass
+
+
+@st.cache_resource
+def get_firebase_service() -> FirebaseService:
+    return FirebaseService()
