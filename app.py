@@ -9,7 +9,7 @@ from io import BytesIO
 import base64  # أضفه مع الاستيرادات الأخرى
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
+from services.visitor_tracker import init_visitor_tracking
 from config import APP_CONFIG
 from static.styles import get_main_css
 from services.firebase_service import get_firebase_service
@@ -29,6 +29,20 @@ def init_session():
 
 def get_db(): return get_firebase_service()
 
+def main():
+    st.markdown(get_main_css(), unsafe_allow_html=True)
+    init_session()
+    
+    # ✅ تتبع الزائر
+    init_visitor_tracking()
+    
+    if not get_db().is_connected:
+        st.error("❌ تعذر الاتصال"); st.stop()
+    
+    page = st.session_state.get("page", "accueil")
+    pages = {...}
+    pages.get(page, render_accueil)()
+    
 def generate_qr(data: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=2)
     qr.add_data(data); qr.make(fit=True)
