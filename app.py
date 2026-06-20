@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (حركة مستمرة) =====
+        # ===== إعلانات متحركة (رسوم CSS متحركة - لا تتوقف أبداً) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -235,23 +235,48 @@ def render_accueil():
                 text_c = first.get('text_color', '#1e293b')
                 border = first.get('border_color', '#f59e0b')
                 
-                # دمج الإعلانات في نص واحد
+                # بناء النص مع مسافات بين الإعلانات
                 ann_texts = []
                 for ann in ann_list[:5]:
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
+                # استخدام رسوم CSS للحركة المتواصلة (نسختان من النص لضمان التدوير السلس)
                 ann_html = f'''
-                <div style="overflow:hidden;background:{bg};padding:10px 15px;border-radius:10px;margin-bottom:15px;border:2px solid {border};">
-                    <marquee behavior="scroll" direction="right" scrollamount="5" 
-                             style="color:{text_c};font-weight:bold;font-size:1rem;white-space:nowrap;"
-                             loop="-1" truespeed="true">
-                        {full_text}
-                    </marquee>
+                <style>
+                @keyframes scroll {{
+                    0% {{ transform: translateX(100%); }}
+                    100% {{ transform: translateX(-100%); }}
+                }}
+                .marquee-container {{
+                    overflow: hidden;
+                    white-space: nowrap;
+                    background: {bg};
+                    border: 2px solid {border};
+                    border-radius: 10px;
+                    padding: 10px 0;
+                    margin-bottom: 15px;
+                }}
+                .marquee-content {{
+                    display: inline-block;
+                    animation: scroll 20s linear infinite;
+                    color: {text_c};
+                    font-weight: bold;
+                    font-size: 1rem;
+                    white-space: nowrap;
+                }}
+                .marquee-content span {{
+                    margin: 0 50px;  /* مسافة بين الإعلانات لتبدو وكأنها تتدحرج */
+                }}
+                </style>
+                <div class="marquee-container">
+                    <div class="marquee-content">
+                        <span>{full_text}</span>
+                        <span>{full_text}</span>  <!-- النسخة الثانية لتكمل الحركة بدون فراغ -->
+                    </div>
                 </div>
                 '''
                 st.markdown(ann_html, unsafe_allow_html=True)
-
         # ===== عروض خاصة (من قاعدة البيانات) =====
         offres = db.get_data("offres") or {}
         if offres:
