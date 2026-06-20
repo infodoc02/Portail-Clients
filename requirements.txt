@@ -4,3 +4,4 @@ firebase-admin>=6.2.0
 pyTelegramBotAPI>=4.14.0
 pytz>=2023.3
 pandas>=2.0.0
+qrcode
