@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (رسوم CSS متحركة - لا تتوقف أبداً) =====
+        # ===== إعلانات متحركة (عكس الاتجاه + سرعة أبطأ) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -235,18 +235,18 @@ def render_accueil():
                 text_c = first.get('text_color', '#1e293b')
                 border = first.get('border_color', '#f59e0b')
                 
-                # بناء النص مع مسافات بين الإعلانات
+                # بناء النص
                 ann_texts = []
                 for ann in ann_list[:5]:
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
-                # استخدام رسوم CSS للحركة المتواصلة (نسختان من النص لضمان التدوير السلس)
+                # رسوم CSS للحركة من اليمين إلى اليسار بسرعة أبطأ
                 ann_html = f'''
                 <style>
                 @keyframes scroll {{
-                    0% {{ transform: translateX(100%); }}
-                    100% {{ transform: translateX(-100%); }}
+                    0% {{ transform: translateX(100%); }}  /* يبدأ من اليمين */
+                    100% {{ transform: translateX(-100%); }} /* ينتهي إلى اليسار */
                 }}
                 .marquee-container {{
                     overflow: hidden;
@@ -256,23 +256,24 @@ def render_accueil():
                     border-radius: 10px;
                     padding: 10px 0;
                     margin-bottom: 15px;
+                    direction: rtl; /* يدعم بداية النص من اليمين */
                 }}
                 .marquee-content {{
                     display: inline-block;
-                    animation: scroll 20s linear infinite;
+                    animation: scroll 40s linear infinite; /* السرعة أبطأ (كان 20s) */
                     color: {text_c};
                     font-weight: bold;
                     font-size: 1rem;
                     white-space: nowrap;
                 }}
                 .marquee-content span {{
-                    margin: 0 50px;  /* مسافة بين الإعلانات لتبدو وكأنها تتدحرج */
+                    margin: 0 80px; /* مسافة أكبر بين النسختين */
                 }}
                 </style>
                 <div class="marquee-container">
                     <div class="marquee-content">
                         <span>{full_text}</span>
-                        <span>{full_text}</span>  <!-- النسخة الثانية لتكمل الحركة بدون فراغ -->
+                        <span>{full_text}</span>
                     </div>
                 </div>
                 '''
