@@ -80,199 +80,6 @@ def get_repair_progress(status):
     }
     return progress_map.get(status, (0, "#94a3b8", status))
 
-# ===== الصفحة الرئيسية =====
-def render_accueil():
-    db = get_db()
-
-    # ===== الهيرو الصغير مع الأيقونة =====
-    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ico.ico")
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            logo_b64 = base64.b64encode(f.read()).decode()
-        logo_html = f'<img src="data:image/x-icon;base64,{logo_b64}" style="width:50px;height:50px;vertical-align:middle;margin-left:10px;">'
-    else:
-        logo_html = '<span style="font-size:2.5rem;">💻</span>'
-
-    # حالة المحل
-    try:
-        shop_status = db.get_data("shop_settings") or {}
-        is_open = shop_status.get("is_open", True)
-    except:
-        is_open = True
-
-    if is_open:
-        status_badge = '<span style="background:#22c55e;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;">🟢 مفتوح</span>'
-    else:
-        status_badge = '<span style="background:#ef4444;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
-
-    # عرض الهيرو (دائماً)
-    st.markdown(f"""
-    <style>@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
-    <div style="display:flex;align-items:center;justify-content:space-between;
-                background:rgba(30,58,138,0.5);backdrop-filter:blur(15px);
-                -webkit-backdrop-filter:blur(15px);
-                border:1px solid rgba(255,255,255,0.15);
-                padding:15px 20px;border-radius:15px;margin-bottom:15px;color:white;">
-        <div style="display:flex;align-items:center;gap:12px;">
-            {logo_html}
-            <div>
-                <h2 style="margin:0;font-size:1.5rem;font-weight:900;">InfoDoc</h2>
-                <p style="margin:0;font-size:0.8rem;opacity:0.9;">ورشة صيانة الحواسيب</p>
-            </div>
-        </div>
-        <div style="text-align:right;">
-            {status_badge}
-            <div style="margin-top:5px;font-size:0.75rem;opacity:0.8;">
-                <span>📱 0798 66 19 00</span> | <span>📍 الشلف - تنس</span>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # بعد ذلك التبويبات والإعلانات والعروض والخدمات (نفس الكود الموجود سابقاً)
-    tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
-
-    with tab1:
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("🔑 دخول إلى حسابي", use_container_width=True, type="primary"):
-                st.session_state["page"] = "login"; st.rerun()
-        with c2:
-            if st.button("✨ إنشاء حساب جديد", use_container_width=True):
-                st.session_state["page"] = "register"; st.rerun()
-
-        st.markdown("---")
-
-        # إعلانات
-        annonces = db.get_data("annonces") or {}
-        if annonces:
-            ann_list = []
-            for key, val in annonces.items():
-                if val: val["_id"] = key; ann_list.append(val)
-            ann_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-            if ann_list:
-                first = ann_list[0]
-                bg = first.get('bg_color', '#fef3c7')
-                text_c = first.get('text_color', '#1e293b')
-                border = first.get('border_color', '#f59e0b')
-                ann_html = f'<div style="overflow:hidden;background:{bg};padding:10px 15px;border-radius:10px;margin-bottom:15px;border:2px solid {border};">'
-                ann_html += f'<marquee behavior="scroll" direction="right" scrollamount="4" style="color:{text_c};font-weight:bold;font-size:1rem;">'
-                for ann in ann_list[:5]:
-                    ann_html += f'📢 {ann.get("title", "")}: {ann.get("content", "")} &nbsp;&nbsp;|&nbsp;&nbsp; '
-                ann_html += '</marquee></div>'
-                st.markdown(ann_html, unsafe_allow_html=True)
-
-        # عروض
-        offres = db.get_data("offres") or {}
-        if offres:
-            off_list = []
-            for key, val in offres.items():
-                if val: val["_id"] = key; off_list.append(val)
-            off_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-            if off_list:
-                st.markdown("### 🎉 عروض خاصة")
-                cols = st.columns(min(len(off_list), 4))
-                for i, off in enumerate(off_list[:4]):
-                    with cols[i]:
-                        st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;">
-                            <span style="background:{off.get('badge_color','#dc2626')};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
-                            <h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4>
-                            <p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p>
-                        </div>
-                        <style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
-        else:
-            st.markdown("### 🎉 عروض خاصة")
-            o1, o2 = st.columns(2)
-            with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}}@keyframes pulse-badge{{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}}</style>""", unsafe_allow_html=True)
-            with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}}</style>""", unsafe_allow_html=True)
-
-    with tab2:
-        # خدماتنا ... (نفس الكود السابق)
-        # يفضل وضع كود التبويب الثاني كاملاً من النسخة النهائية السابقة
-    
-    tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
-    
-    with tab1:
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("🔑 دخول إلى حسابي", use_container_width=True, type="primary"): 
-                st.session_state["page"] = "login"; st.rerun()
-        with c2:
-            if st.button("✨ إنشاء حساب جديد", use_container_width=True): 
-                st.session_state["page"] = "register"; st.rerun()
-        
-        st.markdown("---")
-        
-                # عروض متحركة
-        offres = db.get_data("offres") or {}
-        if offres:
-            off_list = []
-            for key, val in offres.items():
-                if val:
-                    val["_id"] = key
-                    off_list.append(val)
-            off_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-            
-            if off_list:
-                st.markdown("### 🎉 عروض خاصة")
-                cols = st.columns(min(len(off_list), 4))
-                for i, off in enumerate(off_list[:4]):
-                    with cols[i]:
-                        bg_from = off.get('bg_from', '#fef3c7')
-                        bg_to = off.get('bg_to', '#fde68a')
-                        badge_c = off.get('badge_color', '#dc2626')
-                        
-                        st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;">
-                            <span style="background:{badge_c};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
-                            <h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4>
-                            <p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p>
-                        </div>
-                        <style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
-        else:
-            # عروض افتراضية
-            st.markdown("### 🎉 عروض خاصة")
-            o1, o2 = st.columns(2)
-            with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);
-                -webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);
-                padding:18px;border-radius:15px;text-align:center;min-height:110px;
-                animation:bounce-1 2s ease-in-out infinite;">
-                <span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span>
-                <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4>
-                <p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div>
-                <style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
-            with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);
-                -webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);
-                padding:18px;border-radius:15px;text-align:center;min-height:110px;
-                animation:bounce-2 2.5s ease-in-out infinite;">
-                <span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span>
-                <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4>
-                <p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div>
-                <style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}</style>""", unsafe_allow_html=True)
-    
-    with tab2:
-        st.markdown("### 🛠️ جميع خدماتنا")
-        sections = [
-            ("🔧 خدمات التصليح والصيانة", [("🖥️","صيانة الحواسيب","تشخيص وإصلاح جميع أعطال الحواسيب"),("⚡","تحديث البيوس","فلاش وإصلاح مشاكل البيوس"),("🔩","البطاقات الأم","تصليح Motherboard"),("💾","استبدال القطع","شاشات، بطاريات، مراوح"),("🧹","تنظيف دوري","تنظيف عميق ومعجون حراري"),("🔐","فك كلمات المرور","إزالة كلمة مرور البيوس")]),
-            ("🛒 بيع الحواسيب وعتاد الإعلام الآلي", [("💻","حواسيب محمولة","جديدة ومستعملة"),("🖥️","حواسيب مكتبية","تجميع حسب الطلب"),("🖨️","طابعات وملحقات","أحبار وقطع غيار"),("⌨️","أكسسوارات","لوحات مفاتيح، فئران"),("💿","أقراص وفلاشات","SSD، HDD"),("🔌","كوابل ومحولات","شواحن، توصيلات")]),
-            ("💿 خدمات البرمجة والسوفتوير", [("💿","تنصيب الأنظمة","Windows، Linux"),("🛡️","الحماية","إزالة الفيروسات"),("💾","استرجاع البيانات","استعادة الملفات"),("📦","نسخ احتياطي","حفظ ونقل البيانات"),("🔧","حلول تقنية","شبكات، استشارات")]),
-            ("🎮 خدمات ألعاب الفيديو", [("🎮","بيع الألعاب","جميع المنصات"),("🕹️","أكسسوارات Gaming","أذرعة، سماعات"),("🖥️","حواسيب Gaming","تجميع مخصص"),("🔧","صيانة الأجهزة","PS4، PS5، Xbox")]),
-            ("📋 الخدمات المكتبية", [("📄","الطباعة والنسخ","مستندات، تصوير"),("📝","الخدمات الإدارية","سير ذاتية، ترجمة"),("📊","خدمات رقمية","PowerPoint، إدخال"),("📧","خدمات الإنترنت","Emails، تحميل")]),
-        ]
-        for section_title, services in sections:
-            st.markdown(f"#### {section_title}")
-            cols = st.columns(3)
-            for i, (icon, title, desc) in enumerate(services):
-                with cols[i % 3]:
-                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);
-                        -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);
-                        padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;
-                        transition:transform 0.3s,background 0.3s;"
-                        onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';"
-                        onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';">
-                        <span style="font-size:1.3rem;">{icon}</span>
-                        <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
-                        <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
-
 # ===== تسجيل الدخول =====
 def render_login():
     st.markdown("### 🔑 دخول إلى حسابك")
@@ -347,6 +154,134 @@ def render_login():
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"
                 st.rerun()
+# ===== الصفحة الرئيسية (مصححة بدون تكرار) =====
+def render_accueil():
+    db = get_db()
+
+    # ===== الهيرو الصغير مع الأيقونة =====
+    logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ico.ico")
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_b64 = base64.b64encode(f.read()).decode()
+        logo_html = f'<img src="data:image/x-icon;base64,{logo_b64}" style="width:50px;height:50px;vertical-align:middle;margin-left:10px;">'
+    else:
+        logo_html = '<span style="font-size:2.5rem;">💻</span>'
+
+    # حالة المحل
+    try:
+        shop_status = db.get_data("shop_settings") or {}
+        is_open = shop_status.get("is_open", True)
+    except:
+        is_open = True
+
+    if is_open:
+        status_badge = '<span style="background:#22c55e;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;">🟢 مفتوح</span>'
+    else:
+        status_badge = '<span style="background:#ef4444;color:white;padding:4px 12px;border-radius:15px;font-size:0.75rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
+
+    st.markdown(f"""
+    <style>@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                background:rgba(30,58,138,0.5);backdrop-filter:blur(15px);
+                -webkit-backdrop-filter:blur(15px);
+                border:1px solid rgba(255,255,255,0.15);
+                padding:15px 20px;border-radius:15px;margin-bottom:15px;color:white;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            {logo_html}
+            <div>
+                <h2 style="margin:0;font-size:1.5rem;font-weight:900;">InfoDoc</h2>
+                <p style="margin:0;font-size:0.8rem;opacity:0.9;">ورشة صيانة الحواسيب</p>
+            </div>
+        </div>
+        <div style="text-align:right;">
+            {status_badge}
+            <div style="margin-top:5px;font-size:0.75rem;opacity:0.8;">
+                <span>📱 0798 66 19 00</span> | <span>📍 الشلف - تنس</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # التبويبات مرة واحدة فقط
+    tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
+
+    with tab1:
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("🔑 دخول إلى حسابي", use_container_width=True, type="primary"):
+                st.session_state["page"] = "login"; st.rerun()
+        with c2:
+            if st.button("✨ إنشاء حساب جديد", use_container_width=True):
+                st.session_state["page"] = "register"; st.rerun()
+
+        st.markdown("---")
+
+        # إعلانات
+        annonces = db.get_data("annonces") or {}
+        if annonces:
+            ann_list = []
+            for key, val in annonces.items():
+                if val: val["_id"] = key; ann_list.append(val)
+            ann_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            if ann_list:
+                first = ann_list[0]
+                bg = first.get('bg_color', '#fef3c7')
+                text_c = first.get('text_color', '#1e293b')
+                border = first.get('border_color', '#f59e0b')
+                ann_html = f'<div style="overflow:hidden;background:{bg};padding:10px 15px;border-radius:10px;margin-bottom:15px;border:2px solid {border};">'
+                ann_html += f'<marquee behavior="scroll" direction="right" scrollamount="4" style="color:{text_c};font-weight:bold;font-size:1rem;">'
+                for ann in ann_list[:5]:
+                    ann_html += f'📢 {ann.get("title", "")}: {ann.get("content", "")} &nbsp;&nbsp;|&nbsp;&nbsp; '
+                ann_html += '</marquee></div>'
+                st.markdown(ann_html, unsafe_allow_html=True)
+
+        # عروض
+        offres = db.get_data("offres") or {}
+        if offres:
+            off_list = []
+            for key, val in offres.items():
+                if val: val["_id"] = key; off_list.append(val)
+            off_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            if off_list:
+                st.markdown("### 🎉 عروض خاصة")
+                cols = st.columns(min(len(off_list), 4))
+                for i, off in enumerate(off_list[:4]):
+                    with cols[i]:
+                        st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;">
+                            <span style="background:{off.get('badge_color','#dc2626')};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
+                            <h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4>
+                            <p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p>
+                        </div>
+                        <style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
+        else:
+            st.markdown("### 🎉 عروض خاصة")
+            o1, o2 = st.columns(2)
+            with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}}@keyframes pulse-badge{{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}}</style>""", unsafe_allow_html=True)
+            with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}}</style>""", unsafe_allow_html=True)
+
+    with tab2:
+        st.markdown("### 🛠️ جميع خدماتنا")
+        sections = [
+            ("🔧 خدمات التصليح والصيانة", [("🖥️","صيانة الحواسيب","تشخيص وإصلاح جميع أعطال الحواسيب"),("⚡","تحديث البيوس","فلاش وإصلاح مشاكل البيوس"),("🔩","البطاقات الأم","تصليح Motherboard"),("💾","استبدال القطع","شاشات، بطاريات، مراوح"),("🧹","تنظيف دوري","تنظيف عميق ومعجون حراري"),("🔐","فك كلمات المرور","إزالة كلمة مرور البيوس")]),
+            ("🛒 بيع الحواسيب وعتاد الإعلام الآلي", [("💻","حواسيب محمولة","جديدة ومستعملة"),("🖥️","حواسيب مكتبية","تجميع حسب الطلب"),("🖨️","طابعات وملحقات","أحبار وقطع غيار"),("⌨️","أكسسوارات","لوحات مفاتيح، فئران"),("💿","أقراص وفلاشات","SSD، HDD"),("🔌","كوابل ومحولات","شواحن، توصيلات")]),
+            ("💿 خدمات البرمجة والسوفتوير", [("💿","تنصيب الأنظمة","Windows، Linux"),("🛡️","الحماية","إزالة الفيروسات"),("💾","استرجاع البيانات","استعادة الملفات"),("📦","نسخ احتياطي","حفظ ونقل البيانات"),("🔧","حلول تقنية","شبكات، استشارات")]),
+            ("🎮 خدمات ألعاب الفيديو", [("🎮","بيع الألعاب","جميع المنصات"),("🕹️","أكسسوارات Gaming","أذرعة، سماعات"),("🖥️","حواسيب Gaming","تجميع مخصص"),("🔧","صيانة الأجهزة","PS4، PS5، Xbox")]),
+            ("📋 الخدمات المكتبية", [("📄","الطباعة والنسخ","مستندات، تصوير"),("📝","الخدمات الإدارية","سير ذاتية، ترجمة"),("📊","خدمات رقمية","PowerPoint، إدخال"),("📧","خدمات الإنترنت","Emails، تحميل")]),
+        ]
+        for section_title, services in sections:
+            st.markdown(f"#### {section_title}")
+            cols = st.columns(3)
+            for i, (icon, title, desc) in enumerate(services):
+                with cols[i % 3]:
+                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);
+                        -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);
+                        padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;
+                        transition:transform 0.3s,background 0.3s;"
+                        onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';"
+                        onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';">
+                        <span style="font-size:1.3rem;">{icon}</span>
+                        <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
+                        <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
 
 # ===== التسجيل =====
 def render_register():
