@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (عكس الاتجاه + سرعة أبطأ) =====
+        # ===== إعلانات متحركة (من اليسار إلى اليمين للقراءة العربية) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -241,12 +241,12 @@ def render_accueil():
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
-                # رسوم CSS للحركة من اليمين إلى اليسار بسرعة أبطأ
+                # رسوم CSS للحركة من اليسار إلى اليمين (للقراءة العربية)
                 ann_html = f'''
                 <style>
                 @keyframes scroll {{
-                    0% {{ transform: translateX(100%); }}  /* يبدأ من اليمين */
-                    100% {{ transform: translateX(-100%); }} /* ينتهي إلى اليسار */
+                    0% {{ transform: translateX(-100%); }}  /* يبدأ من اليسار */
+                    100% {{ transform: translateX(100%); }} /* ينتهي إلى اليمين */
                 }}
                 .marquee-container {{
                     overflow: hidden;
@@ -256,18 +256,17 @@ def render_accueil():
                     border-radius: 10px;
                     padding: 10px 0;
                     margin-bottom: 15px;
-                    direction: rtl; /* يدعم بداية النص من اليمين */
                 }}
                 .marquee-content {{
                     display: inline-block;
-                    animation: scroll 40s linear infinite; /* السرعة أبطأ (كان 20s) */
+                    animation: scroll 40s linear infinite; /* سرعة أبطأ */
                     color: {text_c};
                     font-weight: bold;
                     font-size: 1rem;
                     white-space: nowrap;
                 }}
                 .marquee-content span {{
-                    margin: 0 80px; /* مسافة أكبر بين النسختين */
+                    margin: 0 80px;
                 }}
                 </style>
                 <div class="marquee-container">
