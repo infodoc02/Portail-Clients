@@ -154,7 +154,7 @@ def render_login():
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"
                 st.rerun()
-# ===== الصفحة الرئيسية (شريط علوي محسّن) =====
+# ===== الصفحة الرئيسية (نسخة كاملة ومحدثة) =====
 def render_accueil():
     db = get_db()
 
@@ -208,7 +208,7 @@ def render_accueil():
     </div>
     """, unsafe_allow_html=True)
 
-    # ===== باقي الصفحة (التبويبات، الإعلانات، العروض، الخدمات) =====
+    # ===== التبويبات =====
     tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
 
     with tab1:
@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # إعلانات متحركة
+        # ===== إعلانات متحركة (حركة مستمرة) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -234,14 +234,25 @@ def render_accueil():
                 bg = first.get('bg_color', '#fef3c7')
                 text_c = first.get('text_color', '#1e293b')
                 border = first.get('border_color', '#f59e0b')
-                ann_html = f'<div style="overflow:hidden;background:{bg};padding:10px 15px;border-radius:10px;margin-bottom:15px;border:2px solid {border};">'
-                ann_html += f'<marquee behavior="scroll" direction="right" scrollamount="4" style="color:{text_c};font-weight:bold;font-size:1rem;">'
+                
+                # دمج الإعلانات في نص واحد
+                ann_texts = []
                 for ann in ann_list[:5]:
-                    ann_html += f'📢 {ann.get("title", "")}: {ann.get("content", "")} &nbsp;&nbsp;|&nbsp;&nbsp; '
-                ann_html += '</marquee></div>'
+                    ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
+                full_text = '   |   '.join(ann_texts)
+                
+                ann_html = f'''
+                <div style="overflow:hidden;background:{bg};padding:10px 15px;border-radius:10px;margin-bottom:15px;border:2px solid {border};">
+                    <marquee behavior="scroll" direction="right" scrollamount="5" 
+                             style="color:{text_c};font-weight:bold;font-size:1rem;white-space:nowrap;"
+                             loop="-1" truespeed="true">
+                        {full_text}
+                    </marquee>
+                </div>
+                '''
                 st.markdown(ann_html, unsafe_allow_html=True)
 
-        # عروض خاصة (من قاعدة البيانات)
+        # ===== عروض خاصة (من قاعدة البيانات) =====
         offres = db.get_data("offres") or {}
         if offres:
             off_list = []
