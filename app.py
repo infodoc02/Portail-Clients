@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (من اليسار إلى اليمين للقراءة العربية) =====
+        # ===== إعلانات متحركة (بطيئة جداً وتبدأ فوراً) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -241,12 +241,12 @@ def render_accueil():
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
-                # رسوم CSS للحركة من اليسار إلى اليمين (للقراءة العربية)
+                # رسوم CSS للحركة البطيئة من اليسار إلى اليمين
                 ann_html = f'''
                 <style>
                 @keyframes scroll {{
-                    0% {{ transform: translateX(-100%); }}  /* يبدأ من اليسار */
-                    100% {{ transform: translateX(100%); }} /* ينتهي إلى اليمين */
+                    0% {{ transform: translateX(-100%); }}
+                    100% {{ transform: translateX(100%); }}
                 }}
                 .marquee-container {{
                     overflow: hidden;
@@ -259,14 +259,15 @@ def render_accueil():
                 }}
                 .marquee-content {{
                     display: inline-block;
-                    animation: scroll 40s linear infinite; /* سرعة أبطأ */
+                    animation: scroll 60s linear infinite; /* أبطأ بكثير */
+                    animation-delay: 0s; /* يبدأ فوراً */
                     color: {text_c};
                     font-weight: bold;
                     font-size: 1rem;
                     white-space: nowrap;
                 }}
                 .marquee-content span {{
-                    margin: 0 80px;
+                    margin: 0 60px; /* مسافة مناسبة */
                 }}
                 </style>
                 <div class="marquee-container">
