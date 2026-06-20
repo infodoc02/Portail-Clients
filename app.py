@@ -27,24 +27,6 @@ def init_session():
             st.session_state[k] = v
 
 def get_db(): return get_firebase_service()
-
-def main():
-    st.markdown(get_main_css(), unsafe_allow_html=True)
-    init_session()
-    
-    db = get_db()
-    if db.is_connected:
-        # تسجيل الزيارة مرة واحدة لكل جلسة
-        if not st.session_state.get("visit_recorded"):
-            db.track_visitor()
-            st.session_state.visit_recorded = True
-    
-    if not db.is_connected:
-        st.error("❌ تعذر الاتصال"); st.stop()
-    
-    page = st.session_state.get("page", "accueil")
-    pages = {"accueil":render_accueil,"login":render_login,"register":render_register,"dashboard":render_dashboard}
-    pages.get(page, render_accueil)()
     
 def generate_qr(data: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=2)
@@ -171,7 +153,7 @@ def render_login():
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"
                 st.rerun()
-# ===== الصفحة الرئيسية (نسخة كاملة ومحدثة) =====
+
 # ===== الصفحة الرئيسية (نسخة كاملة مع عدد الزوار في الشريط) =====
 def render_accueil():
     db = get_db()
@@ -197,10 +179,9 @@ def render_accueil():
     else:
         status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
-    # جلب عدد الزوار مباشرة من Firebase
+    # جلب عدد الزوار الإجمالي من العداد
     try:
-        visitors_data = db.get_data("visitors") or {}
-        total_visits = len(visitors_data)
+        total_visits = db.get_data("stats/total_visitors") or 0
     except:
         total_visits = 0
 
@@ -614,14 +595,19 @@ def render_dashboard():
                     db.save_demande({"phone":phone,"client_name":name,"telegram_id":telegram_id,"brand":brand,"model":model,"device_type":dtype,"fault":fault,"status":"en_attente","created_at":datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")})
                     st.success("✅ تم! الحالة: لم يدفع بعد"); st.balloons(); time.sleep(1); st.rerun()
 
-# ===== رئيسي =====
 def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
-    if not get_db().is_connected: st.error("❌ تعذر الاتصال"); st.stop()
+    
+    db = get_db()
+    if db.is_connected:
+        db.increment_total_visitors()   # <-- يزيد العداد مع كل تحميل للصفحة
+    
+    if not db.is_connected:
+        st.error("❌ تعذر الاتصال"); st.stop()
+    
     page = st.session_state.get("page", "accueil")
     pages = {"accueil":render_accueil,"login":render_login,"register":render_register,"dashboard":render_dashboard}
     pages.get(page, render_accueil)()
-
 if __name__ == "__main__":
     main()
