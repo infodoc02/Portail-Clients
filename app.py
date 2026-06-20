@@ -222,7 +222,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # ===== إعلانات متحركة (بدء فوري مع تحسينات) =====
+        # ===== إعلانات متحركة (حل جافاسكريبت مضمون) =====
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -241,45 +241,72 @@ def render_accueil():
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
                 
-                # رسوم CSS للحركة الفورية من اليسار إلى اليمين
-                ann_html = f'''
+                # استخدام HTML + جافاسكريبت داخل components.html لضمان البدء الفوري
+                ann_js = f'''
+                <!DOCTYPE html>
+                <html>
+                <head>
+                <meta charset="UTF-8">
                 <style>
-                @keyframes scroll {{
-                    0% {{ transform: translateX(-100%); }}
-                    100% {{ transform: translateX(100%); }}
-                }}
-                .marquee-container {{
-                    overflow: hidden;
-                    white-space: nowrap;
-                    background: {bg};
-                    border: 2px solid {border};
-                    border-radius: 10px;
-                    padding: 10px 0;
-                    margin-bottom: 15px;
-                }}
-                .marquee-content {{
-                    display: inline-block;
-                    animation: scroll 60s linear infinite;
-                    animation-play-state: running;
-                    will-change: transform;
-                    color: {text_c};
-                    font-weight: bold;
-                    font-size: 1rem;
-                    white-space: nowrap;
-                    transform: translateZ(0); /* تسريع الأجهزة */
-                }}
-                .marquee-content span {{
-                    margin: 0 60px;
-                }}
+                    body {{
+                        margin: 0;
+                        padding: 0;
+                        background: transparent;
+                    }}
+                    .marquee-container {{
+                        overflow: hidden;
+                        white-space: nowrap;
+                        background: {bg};
+                        border: 2px solid {border};
+                        border-radius: 10px;
+                        padding: 10px 0;
+                        margin-bottom: 15px;
+                    }}
+                    .marquee-content {{
+                        display: inline-block;
+                        white-space: nowrap;
+                        color: {text_c};
+                        font-weight: bold;
+                        font-size: 1rem;
+                        position: relative;
+                        will-change: transform;
+                    }}
+                    .marquee-content span {{
+                        margin: 0 60px;
+                    }}
                 </style>
+                </head>
+                <body>
                 <div class="marquee-container">
-                    <div class="marquee-content">
+                    <div class="marquee-content" id="marquee">
                         <span>{full_text}</span>
                         <span>{full_text}</span>
                     </div>
                 </div>
+                <script>
+                    (function() {{
+                        var marquee = document.getElementById('marquee');
+                        var container = marquee.parentElement;
+                        var speed = 0.5; // بكسل لكل إطار (كلما قل كان أبطأ)
+                        var pos = -marquee.offsetWidth / 2; // ابدأ من منتصف النص لليسار
+                        
+                        function step() {{
+                            pos += speed;
+                            if (pos >= container.offsetWidth) {{
+                                pos = -marquee.offsetWidth / 2;
+                            }}
+                            marquee.style.transform = 'translateX(' + pos + 'px)';
+                            requestAnimationFrame(step);
+                        }}
+                        
+                        // بدء فوري بعد تحميل الصفحة
+                        step();
+                    }})();
+                </script>
+                </body>
+                </html>
                 '''
-                st.markdown(ann_html, unsafe_allow_html=True)
+                st.components.v1.html(ann_js, height=70, scrolling=False)
         # ===== عروض خاصة (من قاعدة البيانات) =====
         offres = db.get_data("offres") or {}
         if offres:
