@@ -155,6 +155,7 @@ def render_login():
                 st.session_state["page"] = "accueil"
                 st.rerun()
 # ===== الصفحة الرئيسية (مصححة بدون تكرار) =====
+# ===== الصفحة الرئيسية (نسخة احترافية كاملة) =====
 def render_accueil():
     db = get_db()
 
@@ -202,7 +203,7 @@ def render_accueil():
     </div>
     """, unsafe_allow_html=True)
 
-    # التبويبات مرة واحدة فقط
+    # التبويبات
     tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
 
     with tab1:
@@ -216,7 +217,7 @@ def render_accueil():
 
         st.markdown("---")
 
-        # إعلانات
+        # إعلانات متحركة
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -235,7 +236,7 @@ def render_accueil():
                 ann_html += '</marquee></div>'
                 st.markdown(ann_html, unsafe_allow_html=True)
 
-        # عروض
+        # عروض خاصة (من قاعدة البيانات)
         offres = db.get_data("offres") or {}
         if offres:
             off_list = []
@@ -246,18 +247,35 @@ def render_accueil():
                 st.markdown("### 🎉 عروض خاصة")
                 cols = st.columns(min(len(off_list), 4))
                 for i, off in enumerate(off_list[:4]):
+                    badge_color = off.get('badge_color', '#dc2626')
                     with cols[i]:
                         st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;">
-                            <span style="background:{off.get('badge_color','#dc2626')};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
+                            <span style="background:{badge_color};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
                             <h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4>
                             <p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p>
                         </div>
-                        <style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
+                        <style>
+                        @keyframes bounce-{i} {{ 0%,100%{{transform:translateY(0)}} 50%{{transform:translateY(-8px)}} }}
+                        @keyframes pulse-badge {{ 0%,100%{{transform:scale(1)}} 50%{{transform:scale(1.08)}} }}
+                        </style>""", unsafe_allow_html=True)
         else:
+            # عروض افتراضية (ثابتة)
             st.markdown("### 🎉 عروض خاصة")
             o1, o2 = st.columns(2)
-            with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}}@keyframes pulse-badge{{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}}</style>""", unsafe_allow_html=True)
-            with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}}</style>""", unsafe_allow_html=True)
+            with o1:
+                st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;">
+                    <span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span>
+                    <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4>
+                    <p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p>
+                </div>
+                <style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
+            with o2:
+                st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;">
+                    <span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span>
+                    <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4>
+                    <p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p>
+                </div>
+                <style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
 
     with tab2:
         st.markdown("### 🛠️ جميع خدماتنا")
