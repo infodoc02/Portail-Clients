@@ -9,7 +9,6 @@ from io import BytesIO
 import base64  # أضفه مع الاستيرادات الأخرى
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from services.visitor_tracker import init_visitor_tracking
 from config import APP_CONFIG
 from static.styles import get_main_css
 from services.firebase_service import get_firebase_service
@@ -34,13 +33,72 @@ def main():
     init_session()
     
     # ✅ تتبع الزائر
-    init_visitor_tracking()
+    try:
+        from services.visitor_tracker import init_visitor_tracking, get_visitor_stats
+        init_visitor_tracking()
+        
+        # 🎉 نافذة ترحيبية (تظهر مرة واحدة فقط)
+        if not st.session_state.get("welcome_shown"):
+            stats = get_visitor_stats()
+            total_visits = stats["total_visits"] if stats else 0
+            
+            st.markdown(f"""
+            <style>
+                .welcome-overlay {{
+                    position: fixed;
+                    top: 0; left: 0;
+                    width: 100%; height: 100%;
+                    background: rgba(0, 0, 0, 0.7);
+                    z-index: 9999;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    animation: fadeOut 4s forwards;
+                }}
+                @keyframes fadeOut {{
+                    0% {{ opacity: 1; }}
+                    80% {{ opacity: 1; }}
+                    100% {{ opacity: 0; visibility: hidden; }}
+                }}
+                .welcome-card {{
+                    background: white;
+                    padding: 40px;
+                    border-radius: 20px;
+                    text-align: center;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+                    animation: scaleIn 0.5s ease;
+                }}
+                @keyframes scaleIn {{
+                    0% {{ transform: scale(0.5); opacity: 0; }}
+                    100% {{ transform: scale(1); opacity: 1; }}
+                }}
+            </style>
+            <div class="welcome-overlay" onclick="this.style.display='none'">
+                <div class="welcome-card">
+                    <h2 style="font-family: 'Cairo', sans-serif; color: #1e293b;">👋 مرحباً بك في InfoDoc</h2>
+                    <p style="font-size: 1.5rem; color: #334155;">
+                        📊 إجمالي زوار المنصة: <strong style="color: #2563eb;">{total_visits}</strong>
+                    </p>
+                    <p style="color: #94a3b8; font-size: 0.9rem;">(اضغط للمتابعة أو ستغلق تلقائياً)</p>
+                </div>
+            </div>
+            <script>
+                setTimeout(function(){{
+                    var overlay = document.querySelector('.welcome-overlay');
+                    if(overlay) overlay.style.display = 'none';
+                }}, 4000);
+            </script>
+            """, unsafe_allow_html=True)
+            
+            st.session_state.welcome_shown = True
+    except ImportError:
+        st.warning("⚠️ نظام تتبع الزوار غير متاح حالياً.")
     
     if not get_db().is_connected:
         st.error("❌ تعذر الاتصال"); st.stop()
     
     page = st.session_state.get("page", "accueil")
-    pages = {...}
+    pages = {"accueil":render_accueil,"login":render_login,"register":render_register,"dashboard":render_dashboard}
     pages.get(page, render_accueil)()
     
 def generate_qr(data: str):
