@@ -14,7 +14,7 @@ from static.styles import get_main_css
 from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
-st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="💻", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
 
 # ===== تهيئة =====
 def init_session():
@@ -32,14 +32,14 @@ def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
     
-    # ✅ تتبع الزائر (هذا يكفي)
-    try:
-        from services.visitor_tracker import init_visitor_tracking
-        init_visitor_tracking()
-    except ImportError:
-        pass  # لا شيء، فقط نتجاهل إذا لم يكن الملف موجوداً
+    db = get_db()
+    if db.is_connected:
+        # تسجيل الزيارة مرة واحدة لكل جلسة
+        if not st.session_state.get("visit_recorded"):
+            db.track_visitor()
+            st.session_state.visit_recorded = True
     
-    if not get_db().is_connected:
+    if not db.is_connected:
         st.error("❌ تعذر الاتصال"); st.stop()
     
     page = st.session_state.get("page", "accueil")
@@ -197,11 +197,10 @@ def render_accueil():
     else:
         status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
-    # جلب عدد الزوار
+    # جلب عدد الزوار مباشرة من Firebase
     try:
-        from services.visitor_tracker import get_visitor_stats
-        stats = get_visitor_stats()
-        total_visits = stats.get("total_visits", 0) if stats else 0
+        visitors_data = db.get_data("visitors") or {}
+        total_visits = len(visitors_data)
     except:
         total_visits = 0
 
