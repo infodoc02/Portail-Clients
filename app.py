@@ -677,46 +677,149 @@ def render_dashboard():
                 if is_livre and w_stats:
                     if w_stats["is_expired"]:
                         card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;"><span style="color:#ef4444;font-weight:bold;font-size:0.8rem;">🔴 انتهى الضمان</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">منذ {abs(w_stats['days_left'])} يوم</span></div>'''
+def render_dashboard():
+    phone = st.session_state.get("user_phone", "")
+    name = st.session_state.get("user_name", "")
+    
+    col_title, col_logout = st.columns([4, 1])
+    with col_title:
+        st.markdown(f"### 👋 مرحباً {name}")
+    with col_logout:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 خروج", use_container_width=True, type="secondary"):
+            for k in ["user_phone","user_name","logged_in","login_otp","login_otp_sent"]:
+                st.session_state[k] = "" if k != "logged_in" else False
+            st.session_state["page"] = "accueil"
+            st.rerun()
+    
+    db = get_db()
+    client = db.get_client_by_phone(phone)
+    telegram_id = client.get("telegram_id", "") if client else ""
+    
+    # جلب طلبات البوابة
+    my_demandes = db.get_client_demandes(phone)
+    
+    # جلب أجهزة الورشة القديمة
+    my_atelier = db.get_user_devices(phone)
+    
+    # دمج جميع الأجهزة
+    all_devices = []
+    seen_ticket_ids = set()
+    
+    # 1. إضافة طلبات البوابة
+    for d in my_demandes:
+        d["source"] = "demande"
+        if d.get("ticket_id"):
+            seen_ticket_ids.add(str(d.get("ticket_id")))
+            for a in my_atelier:
+                if str(a.get("ID")) == str(d.get("ticket_id")):
+                    d["atelier_status"] = a.get("Statut", "")
+                    d["atelier_prix"] = a.get("Prix", 0)
+                    d["atelier_date_sortie"] = a.get("Date_Sortie", "")
+                    d["atelier_diagnostic"] = a.get("Diagnostic", "")
+                    d["atelier_marque"] = a.get("Appareil", "")
+                    break
+        all_devices.append(d)
+    
+    # 2. إضافة أجهزة الورشة التي لم تضف من البوابة
+    for a in my_atelier:
+        ticket_id = str(a.get("ID", ""))
+        if ticket_id and ticket_id not in seen_ticket_ids:
+            all_devices.append({
+                "source": "atelier",
+                "ticket_id": ticket_id,
+                "status": "confirme",
+                "atelier_status": a.get("Statut", ""),
+                "atelier_prix": a.get("Prix", 0),
+                "atelier_date_sortie": a.get("Date_Sortie", ""),
+                "atelier_diagnostic": a.get("Diagnostic", ""),
+                "brand": a.get("Marque", ""),
+                "model": a.get("Appareil", ""),
+                "fault": a.get("Panne", ""),
+                "created_at": a.get("Date_Entree", ""),
+                "client_name": a.get("Client", name),
+                "phone": phone,
+                "telegram_id": a.get("Telegram_ID", telegram_id),
+            })
+    
+    # فصل الأجهزة: نشطة / منتهية الضمان
+    active_devices = []
+    historique_devices = []
+    
+    for d in all_devices:
+        at_status = d.get("atelier_status", "")
+        if at_status in ["Livré & Payé", "Livré (Dette)"]:
+            w_stats = get_warranty_stats(d.get("atelier_date_sortie", ""))
+            if w_stats and w_stats.get("is_expired"):
+                historique_devices.append(d)
+                continue
+        active_devices.append(d)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("💻 نشطة", len(active_devices))
+    c2.metric("⏳ لم يدفع", sum(1 for d in all_devices if d.get("status")=="en_attente"))
+    c3.metric("📦 أرشيف", len(historique_devices))
+    
+    if telegram_id: st.success("✅ Telegram مربوط - ستتلقى إشعارات")
+    else: st.warning("⚠️ Telegram غير مربوط")
+    
+    st.markdown("---")
+    tab1, tab2, tab3 = st.tabs(["💻 أجهزتي", "📜 الأرشيف", "➕ طلب جديد"])
+    
+    # ===== TAB 1: أجهزتي النشطة =====
+    with tab1:
+        if not active_devices:
+            st.info("لا توجد أجهزة نشطة.")
+        else:
+            for dev in active_devices:
+                s = dev.get("status", "en_attente")
+                at_status = dev.get("atelier_status", "")
+                raw_id = dev.get("ticket_id", dev.get("_id", "---"))
+                dev_id = str(raw_id)[:8] if raw_id else "---"
+                brand = dev.get("brand", dev.get("atelier_marque", ""))
+                model = dev.get("model", "")
+                fault = dev.get("fault", "")
+                prix = int(dev.get("atelier_prix", 0) or 0)
+                created = dev.get("created_at", "")
+
+                if s == "confirme" and at_status:
+                    progress, color, label = get_repair_progress(str(at_status))
+                    status_text = label
+                    status_color = color
+                    is_livre = at_status in ["Livré & Payé", "Livré (Dette)"]
+                    w_stats = get_warranty_stats(dev.get("atelier_date_sortie", "")) if is_livre else None
+                elif s == "confirme":
+                    status_text = "✅ مؤكد - قيد المعالجة"
+                    status_color = "#10b981"
+                    progress = 20
+                    is_livre = False
+                    w_stats = None
+                else:
+                    status_text = "⏳ لم يدفع بعد"
+                    status_color = "#f59e0b"
+                    progress = 5
+                    is_livre = False
+                    w_stats = None
+
+                fault_short = str(fault)[:50] + ('...' if len(str(fault)) > 50 else '')
+
+                card_html = f'''<div style="background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:15px;margin-bottom:12px;transition:transform 0.3s,box-shadow 0.3s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 25px rgba(0,0,0,0.3)';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none';'>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+<div><strong style="color:#f1f5f9;font-size:1rem;">💻 {brand} - {model}</strong><span style="color:#94a3b8;font-size:0.75rem;display:block;">🎫 {dev_id}</span></div>
+<span style="background:{status_color}25;color:{status_color};padding:5px 12px;border-radius:15px;font-weight:bold;font-size:0.8rem;">{status_text}</span></div>
+<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:#94a3b8;font-size:0.7rem;">تقدم الإصلاح</span><span style="color:{status_color};font-weight:bold;font-size:0.75rem;">{progress}%</span></div>
+<div style="background:rgba(255,255,255,0.1);height:6px;border-radius:3px;overflow:hidden;"><div style="background:{status_color};width:{progress}%;height:100%;border-radius:3px;transition:width 0.5s;"></div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="color:#cbd5e1;font-size:0.85rem;">📌 {fault_short}</span><span style="color:#4ade80;font-weight:bold;font-size:0.9rem;">💰 {prix:,} دج</span></div>
+<span style="color:#64748b;font-size:0.7rem;">📅 {created}</span>'''
+
+                if is_livre and w_stats:
+                    if w_stats["is_expired"]:
+                        card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;"><span style="color:#ef4444;font-weight:bold;font-size:0.8rem;">🔴 انتهى الضمان</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">منذ {abs(w_stats['days_left'])} يوم</span></div>'''
                     else:
                         card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;text-align:center;"><span style="color:#22c55e;font-weight:bold;font-size:0.8rem;">🟢 الضمان ساري</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">متبقي {w_stats['days_left']} يوم</span><div style="background:rgba(255,255,255,0.1);height:4px;border-radius:2px;overflow:hidden;margin-top:5px;"><div style="background:#22c55e;width:{w_stats['percent']}%;height:100%;border-radius:2px;"></div></div></div>'''
 
                 card_html += '</div>'
-                
                 st.markdown(card_html, unsafe_allow_html=True)
-    
-    # ===== TAB 2: الأرشيف =====
-    with tab2:
-        if not historique_devices:
-            st.info("📭 لا توجد أجهزة في الأرشيف. الأجهزة المنتهية ضمانها تظهر هنا.")
-        else:
-            for dev in historique_devices:
-                dev_id = dev.get("ticket_id", "---")
-                brand = dev.get("brand", dev.get("atelier_marque", ""))
-                model = dev.get("model", "")
-                fault = dev.get("fault", "")
-                prix = dev.get("atelier_prix", 0)
-                date_sortie = dev.get("atelier_date_sortie", "")
-                w_stats = get_warranty_stats(date_sortie)
-                
-                st.markdown(f"""<div style="background:#fff;border:1px solid #e5e7eb;border-right:4px solid #6b7280;padding:15px;border-radius:8px;margin-bottom:10px;opacity:0.8;">
-                    <div style="display:flex;justify-content:space-between;"><strong style="color:#6b7280;">💻 {brand} - {model}</strong><span style="color:#6b7280;font-weight:bold;">📦 أرشيف</span></div>
-                    <p style="color:#64748b;margin:5px 0;">📌 {fault} | 🎫 #{dev_id}</p>
-                    <p style="color:#94a3b8;font-size:0.8rem;">💰 {prix:,} دج | 📅 سلم: {date_sortie} | انتهى الضمان منذ {abs(w_stats['days_left']) if w_stats else '?'} يوم</p>
-                </div>""", unsafe_allow_html=True)
-    
-    # ===== TAB 3: طلب جديد =====
-    with tab3:
-        st.markdown("### ➕ طلب صيانة جديد")
-        with st.form("new_req"):
-            brand = st.text_input("العلامة *"); model = st.text_input("الموديل *")
-            dtype = st.selectbox("النوع", APP_CONFIG["SUPPORTED_DEVICE_TYPES"])
-            fault = st.text_area("المشكلة *", height=80)
-            if st.form_submit_button("📤 إرسال", use_container_width=True, type="primary"):
-                if not all([brand, model, fault]): st.error("❌ املأ الحقول")
-                else:
-                    db.save_demande({"phone":phone,"client_name":name,"telegram_id":telegram_id,"brand":brand,"model":model,"device_type":dtype,"fault":fault,"status":"en_attente","created_at":datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")})
-                    st.success("✅ تم! الحالة: لم يدفع بعد"); st.balloons(); time.sleep(1); st.rerun()
-
 def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
