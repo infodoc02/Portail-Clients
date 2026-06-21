@@ -15,7 +15,126 @@ from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
 st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
+# ===== تشغيل بوت التلغرام (نسخة البوابة) ====
+import telebot
+from telebot import types
 
+def run_portal_bot():
+    """بوت مخصص للبوابة - يتعامل فقط مع الربط و OTP"""
+    try:
+        token = st.secrets.get("TELEGRAM_TOKEN")
+        if not token:
+            print("⚠️ توكن التلغرام غير موجود")
+            return
+        
+        bot = telebot.TeleBot(token, parse_mode="Markdown")
+        
+        @bot.message_handler(commands=['start'])
+        def handle_start(message):
+            text_parts = message.text.split()
+            chat_id = str(message.chat.id)
+            
+            if len(text_parts) > 1:
+                phone = text_parts[1].strip()
+                
+                # البحث أو الإنشاء في جدول clients
+                from services.firebase_service import get_firebase_service
+                db = get_firebase_service()
+                
+                if db.is_connected:
+                    client = db.get_client_by_phone(phone)
+                    if client:
+                        # موجود مسبقاً - تحديث telegram_id وإرسال OTP جديد
+                        import random
+                        otp = str(random.randint(1000, 9999))
+                        db.update_data(f"clients/{client['_id']}", {
+                            "telegram_id": chat_id,
+                            "otp": otp,
+                            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        })
+                        bot.send_message(chat_id, 
+                            f"✅ *الحساب موجود مسبقاً*\n\n"
+                            f"🔐 *رمز التحقق:* `{otp}`\n\n"
+                            "📱 ارجع إلى البوابة وأدخل الرمز لتسجيل الدخول.")
+                    else:
+                        # جديد - إنشاء حساب مع OTP
+                        import random
+                        otp = str(random.randint(1000, 9999))
+                        db.push_data("clients", {
+                            "phone": phone,
+                            "telegram_id": chat_id,
+                            "name": "",
+                            "otp": otp,
+                            "verified": False,
+                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        })
+                        bot.send_message(chat_id,
+                            f"🆕 *تم إنشاء حساب جديد*\n\n"
+                            f"🔐 *رمز التحقق:* `{otp}`\n\n"
+                            "📱 ارجع إلى البوابة وأدخل الرمز لإكمال التسجيل.")
+                else:
+                    bot.send_message(chat_id, "❌ عذراً، الخدمة غير متاحة حالياً.")
+            else:
+                # بدون رقم - زر مشاركة
+                markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+                markup.add(types.KeyboardButton("📲 مشاركة رقم الهاتف", request_contact=True))
+                bot.send_message(chat_id,
+                    "👋 *مرحباً بك في InfoDoc*\n\n"
+                    "اضغط زر مشاركة رقم الهاتف للربط.",
+                    reply_markup=markup)
+        
+        @bot.message_handler(content_types=['contact'])
+        def handle_contact(message):
+            chat_id = str(message.chat.id)
+            phone = str(message.contact.phone_number)
+            clean_phone = phone.replace("+213", "0").replace(" ", "").replace("-", "")
+            if clean_phone.startswith("213"):
+                clean_phone = "0" + clean_phone[3:]
+            
+            from services.firebase_service import get_firebase_service
+            db = get_firebase_service()
+            
+            if db.is_connected:
+                client = db.get_client_by_phone(clean_phone)
+                if client:
+                    import random
+                    otp = str(random.randint(1000, 9999))
+                    db.update_data(f"clients/{client['_id']}", {
+                        "telegram_id": chat_id,
+                        "otp": otp,
+                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    })
+                    bot.send_message(chat_id,
+                        f"✅ *تم الربط*\n\n"
+                        f"🔐 *رمز التحقق:* `{otp}`\n\n"
+                        "📱 أدخل الرمز في البوابة.")
+                else:
+                    import random
+                    otp = str(random.randint(1000, 9999))
+                    db.push_data("clients", {
+                        "phone": clean_phone,
+                        "telegram_id": chat_id,
+                        "name": "",
+                        "otp": otp,
+                        "verified": False,
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    })
+                    bot.send_message(chat_id,
+                        f"🆕 *تم إنشاء حساب*\n\n"
+                        f"🔐 *رمز التحقق:* `{otp}`\n\n"
+                        "📱 أدخل الرمز في البوابة.")
+        
+        # تشغيل البوت
+        bot.infinity_polling(timeout=10, long_polling_timeout=5)
+        
+    except Exception as e:
+        print(f"❌ خطأ في بوت البوابة: {e}")
+
+# تشغيل البوت في خيط منفصل
+if "portal_bot_running" not in st.session_state:
+    bot_thread = threading.Thread(target=run_portal_bot, daemon=True)
+    bot_thread.start()
+    st.session_state["portal_bot_running"] = True
 # ===== تهيئة =====
 def init_session():
     defaults = {
