@@ -6,7 +6,7 @@ import sys, os, pytz, json, requests, time, random
 from datetime import datetime
 import qrcode
 from io import BytesIO
-import base64  # أضفه مع الاستيرادات الأخرى
+import base64
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import APP_CONFIG
@@ -15,127 +15,7 @@ from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
 st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
-# ===== تشغيل بوت التلغرام (نسخة البوابة) ====
-import telebot
-import threading
-from telebot import types
 
-def run_portal_bot():
-    """بوت مخصص للبوابة - يتعامل فقط مع الربط و OTP"""
-    try:
-        token = st.secrets.get("TELEGRAM_TOKEN")
-        if not token:
-            print("⚠️ توكن التلغرام غير موجود")
-            return
-        
-        bot = telebot.TeleBot(token, parse_mode="Markdown")
-        
-        @bot.message_handler(commands=['start'])
-        def handle_start(message):
-            text_parts = message.text.split()
-            chat_id = str(message.chat.id)
-            
-            if len(text_parts) > 1:
-                phone = text_parts[1].strip()
-                
-                # البحث أو الإنشاء في جدول clients
-                from services.firebase_service import get_firebase_service
-                db = get_firebase_service()
-                
-                if db.is_connected:
-                    client = db.get_client_by_phone(phone)
-                    if client:
-                        # موجود مسبقاً - تحديث telegram_id وإرسال OTP جديد
-                        import random
-                        otp = str(random.randint(1000, 9999))
-                        db.update_data(f"clients/{client['_id']}", {
-                            "telegram_id": chat_id,
-                            "otp": otp,
-                            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                        })
-                        bot.send_message(chat_id, 
-                            f"✅ *الحساب موجود مسبقاً*\n\n"
-                            f"🔐 *رمز التحقق:* `{otp}`\n\n"
-                            "📱 ارجع إلى البوابة وأدخل الرمز لتسجيل الدخول.")
-                    else:
-                        # جديد - إنشاء حساب مع OTP
-                        import random
-                        otp = str(random.randint(1000, 9999))
-                        db.push_data("clients", {
-                            "phone": phone,
-                            "telegram_id": chat_id,
-                            "name": "",
-                            "otp": otp,
-                            "verified": False,
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                        })
-                        bot.send_message(chat_id,
-                            f"🆕 *تم إنشاء حساب جديد*\n\n"
-                            f"🔐 *رمز التحقق:* `{otp}`\n\n"
-                            "📱 ارجع إلى البوابة وأدخل الرمز لإكمال التسجيل.")
-                else:
-                    bot.send_message(chat_id, "❌ عذراً، الخدمة غير متاحة حالياً.")
-            else:
-                # بدون رقم - زر مشاركة
-                markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-                markup.add(types.KeyboardButton("📲 مشاركة رقم الهاتف", request_contact=True))
-                bot.send_message(chat_id,
-                    "👋 *مرحباً بك في InfoDoc*\n\n"
-                    "اضغط زر مشاركة رقم الهاتف للربط.",
-                    reply_markup=markup)
-        
-        @bot.message_handler(content_types=['contact'])
-        def handle_contact(message):
-            chat_id = str(message.chat.id)
-            phone = str(message.contact.phone_number)
-            clean_phone = phone.replace("+213", "0").replace(" ", "").replace("-", "")
-            if clean_phone.startswith("213"):
-                clean_phone = "0" + clean_phone[3:]
-            
-            from services.firebase_service import get_firebase_service
-            db = get_firebase_service()
-            
-            if db.is_connected:
-                client = db.get_client_by_phone(clean_phone)
-                if client:
-                    import random
-                    otp = str(random.randint(1000, 9999))
-                    db.update_data(f"clients/{client['_id']}", {
-                        "telegram_id": chat_id,
-                        "otp": otp,
-                        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                    })
-                    bot.send_message(chat_id,
-                        f"✅ *تم الربط*\n\n"
-                        f"🔐 *رمز التحقق:* `{otp}`\n\n"
-                        "📱 أدخل الرمز في البوابة.")
-                else:
-                    import random
-                    otp = str(random.randint(1000, 9999))
-                    db.push_data("clients", {
-                        "phone": clean_phone,
-                        "telegram_id": chat_id,
-                        "name": "",
-                        "otp": otp,
-                        "verified": False,
-                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-                    })
-                    bot.send_message(chat_id,
-                        f"🆕 *تم إنشاء حساب*\n\n"
-                        f"🔐 *رمز التحقق:* `{otp}`\n\n"
-                        "📱 أدخل الرمز في البوابة.")
-        
-        # تشغيل البوت
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
-        
-    except Exception as e:
-        print(f"❌ خطأ في بوت البوابة: {e}")
-
-# تشغيل البوت في خيط منفصل
-if "portal_bot_running" not in st.session_state:
-    bot_thread = threading.Thread(target=run_portal_bot, daemon=True)
-    bot_thread.start()
-    st.session_state["portal_bot_running"] = True
 # ===== تهيئة =====
 def init_session():
     defaults = {
@@ -147,7 +27,7 @@ def init_session():
             st.session_state[k] = v
 
 def get_db(): return get_firebase_service()
-    
+
 def generate_qr(data: str):
     qr = qrcode.QRCode(version=1, box_size=10, border=2)
     qr.add_data(data); qr.make(fit=True)
@@ -199,7 +79,7 @@ def get_repair_progress(status):
     }
     return progress_map.get(status, (0, "#94a3b8", status))
 
-# ===== تسجيل الدخول (معدل) =====
+# ===== تسجيل الدخول =====
 def render_login():
     st.markdown("### 🔑 دخول إلى حسابك")
     if not st.session_state.get("login_otp_sent"):
@@ -216,7 +96,6 @@ def render_login():
                         if client:
                             tg_id = client.get("telegram_id", "")
                             if tg_id and tg_id not in ["", "nan", "None"]:
-                                # ✅ مربوط بـ Telegram - أرسل OTP جديد
                                 otp = str(random.randint(1000, 9999))
                                 db.update_data(f"clients/{client['_id']}", {"otp": otp})
                                 send_otp_to_client(tg_id, otp)
@@ -265,11 +144,10 @@ def render_login():
         with col_back:
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"; st.rerun()
-# ===== الصفحة الرئيسية (نسخة كاملة مع عدد الزوار في الشريط) =====
+
+# ===== الصفحة الرئيسية =====
 def render_accueil():
     db = get_db()
-
-    # ===== تحضير الأيقونة =====
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ico.ico")
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
@@ -278,7 +156,6 @@ def render_accueil():
     else:
         logo_img = '<span style="font-size:2.5rem;">💻</span>'
 
-    # حالة المحل
     try:
         shop_status = db.get_data("shop_settings") or {}
         is_open = shop_status.get("is_open", True)
@@ -290,33 +167,22 @@ def render_accueil():
     else:
         status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
-    # جلب عدد الزوار الإجمالي من العداد
     try:
         total_visits = db.get_data("stats/total_visitors") or 0
     except:
         total_visits = 0
 
-    # ===== الشريط العلوي المحسّن (الأيقونة والاسم في الوسط) =====
     st.markdown(f"""
-    <style>
-    @keyframes pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.5}} }}
-    </style>
-    <div style="background:rgba(30,58,138,0.55);backdrop-filter:blur(15px);
-                -webkit-backdrop-filter:blur(15px);
-                border:1px solid rgba(255,255,255,0.2);
-                border-radius:20px;padding:20px 15px;margin-bottom:20px;color:white;">
-        <!-- الصف الأول: الأيقونة + الاسم + حالة المحل -->
+    <style>@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:0.5}}}}</style>
+    <div style="background:rgba(30,58,138,0.55);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:20px 15px;margin-bottom:20px;color:white;">
         <div style="display:flex;align-items:center;justify-content:center;gap:15px;flex-wrap:wrap;margin-bottom:12px;">
             {logo_img}
             <div style="text-align:center;">
                 <h1 style="margin:0;font-size:2rem;font-weight:900;color:white;">InfoDoc</h1>
                 <p style="margin:2px 0 0 0;font-size:0.9rem;opacity:0.9;color:white;"> عيادة الإعلام الآلي - بيع، صيانة محترفة وخدمات</p>
             </div>
-            <div style="display:flex;align-items:center;gap:10px;">
-                {status_badge}
-            </div>
+            <div style="display:flex;align-items:center;gap:10px;">{status_badge}</div>
         </div>
-        <!-- الصف الثاني: معلومات التواصل + عدد الزوار -->
         <div style="display:flex;justify-content:center;gap:30px;flex-wrap:wrap;font-size:0.9rem;opacity:0.85;">
             <span>📱 0798 66 19 00</span>
             <span>📍 الشلف - حي بن سونة بجانب المسبح</span>
@@ -326,21 +192,16 @@ def render_accueil():
     </div>
     """, unsafe_allow_html=True)
 
-    # ===== التبويبات =====
     tab1, tab2 = st.tabs(["🏠 الرئيسية", "🛠️ خدماتنا"])
-
     with tab1:
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("🔑 دخول إلى حسابي", use_container_width=True, type="primary"):
-                st.session_state["page"] = "login"; st.rerun()
+            if st.button("🔑 دخول إلى حسابي", use_container_width=True, type="primary"): st.session_state["page"] = "login"; st.rerun()
         with c2:
-            if st.button("✨ إنشاء حساب جديد", use_container_width=True):
-                st.session_state["page"] = "register"; st.rerun()
-
+            if st.button("✨ إنشاء حساب جديد", use_container_width=True): st.session_state["page"] = "register"; st.rerun()
         st.markdown("---")
 
-        # ===== إعلانات متحركة (حل جافاسكريبت مضمون) =====
+        # إعلانات
         annonces = db.get_data("annonces") or {}
         if annonces:
             ann_list = []
@@ -352,80 +213,14 @@ def render_accueil():
                 bg = first.get('bg_color', '#fef3c7')
                 text_c = first.get('text_color', '#1e293b')
                 border = first.get('border_color', '#f59e0b')
-                
-                # بناء النص
                 ann_texts = []
                 for ann in ann_list[:5]:
                     ann_texts.append(f'📢 {ann.get("title", "")}: {ann.get("content", "")}')
                 full_text = '   |   '.join(ann_texts)
-                
-                # استخدام HTML + جافاسكريبت داخل components.html لضمان البدء الفوري
-                ann_js = f'''
-                <!DOCTYPE html>
-                <html>
-                <head>
-                <meta charset="UTF-8">
-                <style>
-                    body {{
-                        margin: 0;
-                        padding: 0;
-                        background: transparent;
-                    }}
-                    .marquee-container {{
-                        overflow: hidden;
-                        white-space: nowrap;
-                        background: {bg};
-                        border: 2px solid {border};
-                        border-radius: 10px;
-                        padding: 10px 0;
-                        margin-bottom: 15px;
-                    }}
-                    .marquee-content {{
-                        display: inline-block;
-                        white-space: nowrap;
-                        color: {text_c};
-                        font-weight: bold;
-                        font-size: 1rem;
-                        position: relative;
-                        will-change: transform;
-                    }}
-                    .marquee-content span {{
-                        margin: 0 60px;
-                    }}
-                </style>
-                </head>
-                <body>
-                <div class="marquee-container">
-                    <div class="marquee-content" id="marquee">
-                        <span>{full_text}</span>
-                        <span>{full_text}</span>
-                    </div>
-                </div>
-                <script>
-                    (function() {{
-                        var marquee = document.getElementById('marquee');
-                        var container = marquee.parentElement;
-                        var speed = 0.5; // بكسل لكل إطار (كلما قل كان أبطأ)
-                        var pos = -marquee.offsetWidth / 2; // ابدأ من منتصف النص لليسار
-                        
-                        function step() {{
-                            pos += speed;
-                            if (pos >= container.offsetWidth) {{
-                                pos = -marquee.offsetWidth / 2;
-                            }}
-                            marquee.style.transform = 'translateX(' + pos + 'px)';
-                            requestAnimationFrame(step);
-                        }}
-                        
-                        // بدء فوري بعد تحميل الصفحة
-                        step();
-                    }})();
-                </script>
-                </body>
-                </html>
-                '''
+                ann_js = f'''<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{{margin:0;padding:0;background:transparent;}}.marquee-container{{overflow:hidden;white-space:nowrap;background:{bg};border:2px solid {border};border-radius:10px;padding:10px 0;margin-bottom:15px;}}.marquee-content{{display:inline-block;white-space:nowrap;color:{text_c};font-weight:bold;font-size:1rem;position:relative;will-change:transform;}}.marquee-content span{{margin:0 60px;}}</style></head><body><div class="marquee-container"><div class="marquee-content" id="marquee"><span>{full_text}</span><span>{full_text}</span></div></div><script>(function(){{var marquee=document.getElementById('marquee');var container=marquee.parentElement;var speed=0.5;var pos=-marquee.offsetWidth/2;function step(){{pos+=speed;if(pos>=container.offsetWidth){{pos=-marquee.offsetWidth/2;}}marquee.style.transform='translateX('+pos+'px)';requestAnimationFrame(step);}}step();}})();</script></body></html>'''
                 st.components.v1.html(ann_js, height=70, scrolling=False)
-        # ===== عروض خاصة (من قاعدة البيانات) =====
+
+        # عروض
         offres = db.get_data("offres") or {}
         if offres:
             off_list = []
@@ -438,33 +233,12 @@ def render_accueil():
                 for i, off in enumerate(off_list[:4]):
                     badge_color = off.get('badge_color', '#dc2626')
                     with cols[i]:
-                        st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;">
-                            <span style="background:{badge_color};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span>
-                            <h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4>
-                            <p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p>
-                        </div>
-                        <style>
-                        @keyframes bounce-{i} {{ 0%,100%{{transform:translateY(0)}} 50%{{transform:translateY(-8px)}} }}
-                        @keyframes pulse-badge {{ 0%,100%{{transform:scale(1)}} 50%{{transform:scale(1.08)}} }}
-                        </style>""", unsafe_allow_html=True)
+                        st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;"><span style="background:{badge_color};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span><h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4><p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p></div><style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
         else:
-            # عروض افتراضية
             st.markdown("### 🎉 عروض خاصة")
             o1, o2 = st.columns(2)
-            with o1:
-                st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;">
-                    <span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span>
-                    <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4>
-                    <p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p>
-                </div>
-                <style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
-            with o2:
-                st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;">
-                    <span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span>
-                    <h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4>
-                    <p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p>
-                </div>
-                <style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
+            with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
+            with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
 
     with tab2:
         st.markdown("### 🛠️ جميع خدماتنا")
@@ -480,21 +254,12 @@ def render_accueil():
             cols = st.columns(3)
             for i, (icon, title, desc) in enumerate(services):
                 with cols[i % 3]:
-                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);
-                        -webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);
-                        padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;
-                        transition:transform 0.3s,background 0.3s;"
-                        onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';"
-                        onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';">
-                        <span style="font-size:1.3rem;">{icon}</span>
-                        <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
-                        <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
-# ===== التسجيل (معدل) =====
+                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;transition:transform 0.3s,background 0.3s;" onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';"><span style="font-size:1.3rem;">{icon}</span><h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6><p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
+
+# ===== التسجيل =====
 def render_register():
     st.markdown("### ✨ إنشاء حساب جديد")
-    st.markdown("""<div style="background:#fef3c7;border:1px solid #f59e0b;padding:15px;border-radius:10px;margin-bottom:20px;text-align:right;">
-        <strong style="color:#92400e;">⚠️ شروط:</strong><ul style="color:#92400e;font-size:.9rem;"><li>يجب أن يكون لديك Telegram</li><li>سيتم إرسال كود تأكيد</li></ul></div>""", unsafe_allow_html=True)
-
+    st.markdown("""<div style="background:#fef3c7;border:1px solid #f59e0b;padding:15px;border-radius:10px;margin-bottom:20px;text-align:right;"><strong style="color:#92400e;">⚠️ شروط:</strong><ul style="color:#92400e;font-size:.9rem;"><li>يجب أن يكون لديك Telegram</li><li>سيتم إرسال كود تأكيد</li></ul></div>""", unsafe_allow_html=True)
     if st.session_state.get("pending_phone"):
         n = st.session_state["pending_phone"]; name = st.session_state.get("pending_name", "")
         link = f"https://t.me/infodoc02_bot?start={n}"; qr = generate_qr(link)
@@ -504,7 +269,6 @@ def render_register():
         with c1: st.image(qr, width=150)
         with c2: st.markdown(f"""<div style="text-align:right;padding-top:20px;"><p>1️⃣ افتح بوت InfoDoc</p><p>2️⃣ اضغط <strong>/start</strong></p><p>3️⃣ ستصلك رسالة برمز OTP</p><p>4️⃣ ارجع هنا وأدخل الرمز</p><a href="{link}" target="_blank" style="display:inline-block;background:#0088cc;color:white;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:bold;margin-top:15px;">📱 فتح Telegram</a></div>""", unsafe_allow_html=True)
         st.markdown("---"); st.markdown("### 🔐 الخطوة 2: أدخل رمز التأكيد")
-
         with st.form("otp_reg_form"):
             otp_input = st.text_input("رمز OTP (4 أرقام)", max_chars=4, placeholder="XXXX", key="otp_reg_inp")
             ca, cb = st.columns(2)
@@ -512,7 +276,6 @@ def render_register():
                 confirm_reg = st.form_submit_button("✅ تأكيد التسجيل", use_container_width=True)
             with cb:
                 resend_reg = st.form_submit_button("🔄 إعادة إرسال", use_container_width=True)
-
             if confirm_reg:
                 if not otp_input or len(otp_input) != 4: st.error("❌ أدخل الرمز")
                 else:
@@ -523,7 +286,6 @@ def render_register():
                         st.session_state.update({"user_phone": n, "user_name": name, "logged_in": True, "page": "dashboard", "pending_phone": "", "pending_name": ""})
                         st.balloons(); time.sleep(1); st.rerun()
                     else: st.error("❌ رمز غير صحيح أو لم يتم الربط بعد")
-
             if resend_reg:
                 db = get_db(); client = db.get_client_by_phone(n)
                 if client and client.get("telegram_id"):
@@ -532,7 +294,6 @@ def render_register():
                     send_otp_to_client(client["telegram_id"], new_otp)
                     st.success("✅ تم إرسال رمز جديد"); st.rerun()
                 else: st.error("❌ لم يتم ربط Telegram بعد")
-
         col_cancel, col_back = st.columns(2)
         with col_cancel:
             if st.button("❌ إلغاء", key="cancel_reg", use_container_width=True):
@@ -554,32 +315,27 @@ def render_register():
                         if existing_client:
                             tg_id = existing_client.get("telegram_id", "")
                             if tg_id and tg_id not in ["", "nan", "None"]:
-                                # الرقم موجود ومربوط - يمكنه الدخول مباشرة
                                 st.warning("⚠️ هذا الرقم مسجل بالفعل. يمكنك الدخول مباشرة من صفحة الدخول.")
                             else:
-                                # الرقم موجود لكن غير مربوط - يتابع للربط
                                 st.info("ℹ️ الرقم موجود لكنه غير مربوط. امسح الكود للربط.")
                                 st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
                         else:
-                            # رقم جديد - يتابع للربط
                             st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
         if st.button("⬅️ العودة", key="back_reg2", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
+
 # ===== لوحة التحكم =====
 def render_dashboard():
     phone = st.session_state.get("user_phone", "")
     name = st.session_state.get("user_name", "")
     
     col_title, col_logout = st.columns([4, 1])
-    with col_title:
-        st.markdown(f"### 👋 مرحباً {name}")
+    with col_title: st.markdown(f"### 👋 مرحباً {name}")
     with col_logout:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 خروج", use_container_width=True, type="secondary"):
-            for k in ["user_phone","user_name","logged_in","login_otp","login_otp_sent"]:
-                st.session_state[k] = "" if k != "logged_in" else False
-            st.session_state["page"] = "accueil"
-            st.rerun()
+            for k in ["user_phone","user_name","logged_in","login_otp","login_otp_sent"]: st.session_state[k] = "" if k != "logged_in" else False
+            st.session_state["page"] = "accueil"; st.rerun()
     
     db = get_db()
     client = db.get_client_by_phone(phone)
@@ -587,252 +343,119 @@ def render_dashboard():
     my_demandes = db.get_client_demandes(phone)
     my_atelier = db.get_user_devices(phone)
     
-    # تجميع كل الأجهزة
     all_devices = []
+    seen_ids = set()
+    
     for d in my_demandes:
         d["source"] = "demande"
         if d.get("ticket_id"):
+            seen_ids.add(str(d.get("ticket_id")))
             for a in my_atelier:
                 if str(a.get("ID")) == str(d.get("ticket_id")):
                     d["atelier_status"] = a.get("Statut", "")
                     d["atelier_prix"] = a.get("Prix", 0)
                     d["atelier_date_sortie"] = a.get("Date_Sortie", "")
-                    d["atelier_diagnostic"] = a.get("Diagnostic", "")
-                    d["atelier_marque"] = a.get("Appareil", "")
                     break
         all_devices.append(d)
     
-    # فصل الأجهزة: نشطة / منتهية الضمان
-    active_devices = []
-    historique_devices = []
-    
-    for d in all_devices:
-        at_status = d.get("atelier_status", "")
-        if at_status in ["Livré & Payé", "Livré (Dette)"]:
-            w_stats = get_warranty_stats(d.get("atelier_date_sortie", ""))
-            if w_stats and w_stats.get("is_expired"):
-                historique_devices.append(d)
-                continue
-        active_devices.append(d)
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("💻 نشطة", len(active_devices))
-    c2.metric("⏳ لم يدفع", sum(1 for d in all_devices if d.get("status")=="en_attente"))
-    c3.metric("📦 أرشيف", len(historique_devices))
-    
-    if telegram_id: st.success("✅ Telegram مربوط - ستتلقى إشعارات")
-    else: st.warning("⚠️ Telegram غير مربوط")
-    
-    st.markdown("---")
-    tab1, tab2, tab3 = st.tabs(["💻 أجهزتي", "📜 الأرشيف", "➕ طلب جديد"])
-    
-    # ===== TAB 1: أجهزتي النشطة =====
-    with tab1:
-        if not active_devices:
-            st.info("لا توجد أجهزة نشطة.")
-        else:
-            for dev in active_devices:
-                s = dev.get("status", "en_attente")
-                at_status = dev.get("atelier_status", "")
-                raw_id = dev.get("ticket_id", dev.get("_id", "---"))
-                dev_id = str(raw_id)[:8] if raw_id else "---"
-                brand = dev.get("brand", dev.get("atelier_marque", ""))
-                model = dev.get("model", "")
-                fault = dev.get("fault", "")
-                prix = int(dev.get("atelier_prix", 0) or 0)
-                created = dev.get("created_at", "")
-
-                if s == "confirme" and at_status:
-                    progress, color, label = get_repair_progress(str(at_status))
-                    status_text = label
-                    status_color = color
-                    is_livre = at_status in ["Livré & Payé", "Livré (Dette)"]
-                    w_stats = get_warranty_stats(dev.get("atelier_date_sortie", "")) if is_livre else None
-                elif s == "confirme":
-                    status_text = "✅ مؤكد - قيد المعالجة"
-                    status_color = "#10b981"
-                    progress = 20
-                    is_livre = False
-                    w_stats = None
-                else:
-                    status_text = "⏳ لم يدفع بعد"
-                    status_color = "#f59e0b"
-                    progress = 5
-                    is_livre = False
-                    w_stats = None
-
-                fault_short = str(fault)[:50] + ('...' if len(str(fault)) > 50 else '')
-
-                # بناء HTML في متغير
-                card_html = f'''<div style="background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:15px;margin-bottom:12px;transition:transform 0.3s,box-shadow 0.3s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 25px rgba(0,0,0,0.3)';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none';">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-<div><strong style="color:#f1f5f9;font-size:1rem;">💻 {brand} - {model}</strong><span style="color:#94a3b8;font-size:0.75rem;display:block;">🎫 {dev_id}</span></div>
-<span style="background:{status_color}25;color:{status_color};padding:5px 12px;border-radius:15px;font-weight:bold;font-size:0.8rem;">{status_text}</span></div>
-<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:#94a3b8;font-size:0.7rem;">تقدم الإصلاح</span><span style="color:{status_color};font-weight:bold;font-size:0.75rem;">{progress}%</span></div>
-<div style="background:rgba(255,255,255,0.1);height:6px;border-radius:3px;overflow:hidden;"><div style="background:{status_color};width:{progress}%;height:100%;border-radius:3px;transition:width 0.5s;"></div></div></div>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="color:#cbd5e1;font-size:0.85rem;">📌 {fault_short}</span><span style="color:#4ade80;font-weight:bold;font-size:0.9rem;">💰 {prix:,} دج</span></div>
-<span style="color:#64748b;font-size:0.7rem;">📅 {created}</span>'''
-
-                # الضمان
-                if is_livre and w_stats:
-                    if w_stats["is_expired"]:
-                        card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;"><span style="color:#ef4444;font-weight:bold;font-size:0.8rem;">🔴 انتهى الضمان</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">منذ {abs(w_stats['days_left'])} يوم</span></div>'''
-def render_dashboard():
-    phone = st.session_state.get("user_phone", "")
-    name = st.session_state.get("user_name", "")
-    
-    col_title, col_logout = st.columns([4, 1])
-    with col_title:
-        st.markdown(f"### 👋 مرحباً {name}")
-    with col_logout:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 خروج", use_container_width=True, type="secondary"):
-            for k in ["user_phone","user_name","logged_in","login_otp","login_otp_sent"]:
-                st.session_state[k] = "" if k != "logged_in" else False
-            st.session_state["page"] = "accueil"
-            st.rerun()
-    
-    db = get_db()
-    client = db.get_client_by_phone(phone)
-    telegram_id = client.get("telegram_id", "") if client else ""
-    
-    # جلب طلبات البوابة
-    my_demandes = db.get_client_demandes(phone)
-    
-    # جلب أجهزة الورشة القديمة
-    my_atelier = db.get_user_devices(phone)
-    
-    # دمج جميع الأجهزة
-    all_devices = []
-    seen_ticket_ids = set()
-    
-    # 1. إضافة طلبات البوابة
-    for d in my_demandes:
-        d["source"] = "demande"
-        if d.get("ticket_id"):
-            seen_ticket_ids.add(str(d.get("ticket_id")))
-            for a in my_atelier:
-                if str(a.get("ID")) == str(d.get("ticket_id")):
-                    d["atelier_status"] = a.get("Statut", "")
-                    d["atelier_prix"] = a.get("Prix", 0)
-                    d["atelier_date_sortie"] = a.get("Date_Sortie", "")
-                    d["atelier_diagnostic"] = a.get("Diagnostic", "")
-                    d["atelier_marque"] = a.get("Appareil", "")
-                    break
-        all_devices.append(d)
-    
-    # 2. إضافة أجهزة الورشة التي لم تضف من البوابة
     for a in my_atelier:
-        ticket_id = str(a.get("ID", ""))
-        if ticket_id and ticket_id not in seen_ticket_ids:
+        if str(a.get("ID")) not in seen_ids:
             all_devices.append({
-                "source": "atelier",
-                "ticket_id": ticket_id,
-                "status": "confirme",
-                "atelier_status": a.get("Statut", ""),
-                "atelier_prix": a.get("Prix", 0),
-                "atelier_date_sortie": a.get("Date_Sortie", ""),
-                "atelier_diagnostic": a.get("Diagnostic", ""),
-                "brand": a.get("Marque", ""),
-                "model": a.get("Appareil", ""),
-                "fault": a.get("Panne", ""),
-                "created_at": a.get("Date_Entree", ""),
-                "client_name": a.get("Client", name),
-                "phone": phone,
-                "telegram_id": a.get("Telegram_ID", telegram_id),
+                "source": "atelier", "ticket_id": str(a.get("ID")), "status": "confirme",
+                "atelier_status": a.get("Statut", ""), "atelier_prix": a.get("Prix", 0),
+                "atelier_date_sortie": a.get("Date_Sortie", ""), "brand": a.get("Marque", ""),
+                "model": a.get("Appareil", ""), "fault": a.get("Panne", ""),
+                "created_at": a.get("Date_Entree", ""), "client_name": a.get("Client", name),
+                "phone": phone, "telegram_id": a.get("Telegram_ID", telegram_id),
             })
     
-    # فصل الأجهزة: نشطة / منتهية الضمان
-    active_devices = []
-    historique_devices = []
-    
+    active_devices, historique_devices = [], []
     for d in all_devices:
-        at_status = d.get("atelier_status", "")
-        if at_status in ["Livré & Payé", "Livré (Dette)"]:
-            w_stats = get_warranty_stats(d.get("atelier_date_sortie", ""))
-            if w_stats and w_stats.get("is_expired"):
-                historique_devices.append(d)
-                continue
+        if d.get("atelier_status") in ["Livré & Payé", "Livré (Dette)"]:
+            w = get_warranty_stats(d.get("atelier_date_sortie", ""))
+            if w and w.get("is_expired"):
+                historique_devices.append(d); continue
         active_devices.append(d)
     
     c1, c2, c3 = st.columns(3)
     c1.metric("💻 نشطة", len(active_devices))
     c2.metric("⏳ لم يدفع", sum(1 for d in all_devices if d.get("status")=="en_attente"))
     c3.metric("📦 أرشيف", len(historique_devices))
-    
-    if telegram_id: st.success("✅ Telegram مربوط - ستتلقى إشعارات")
+    if telegram_id: st.success("✅ Telegram مربوط")
     else: st.warning("⚠️ Telegram غير مربوط")
     
     st.markdown("---")
     tab1, tab2, tab3 = st.tabs(["💻 أجهزتي", "📜 الأرشيف", "➕ طلب جديد"])
     
-    # ===== TAB 1: أجهزتي النشطة =====
     with tab1:
-        if not active_devices:
-            st.info("لا توجد أجهزة نشطة.")
+        if not active_devices: st.info("لا توجد أجهزة نشطة.")
         else:
             for dev in active_devices:
-                s = dev.get("status", "en_attente")
-                at_status = dev.get("atelier_status", "")
+                s, at_status = dev.get("status","en_attente"), dev.get("atelier_status","")
                 raw_id = dev.get("ticket_id", dev.get("_id", "---"))
                 dev_id = str(raw_id)[:8] if raw_id else "---"
-                brand = dev.get("brand", dev.get("atelier_marque", ""))
-                model = dev.get("model", "")
+                brand, model = dev.get("brand", dev.get("atelier_marque", "")), dev.get("model", "")
                 fault = dev.get("fault", "")
                 prix = int(dev.get("atelier_prix", 0) or 0)
-                created = dev.get("created_at", "")
-
+                
                 if s == "confirme" and at_status:
                     progress, color, label = get_repair_progress(str(at_status))
-                    status_text = label
-                    status_color = color
+                    status_text, status_color = label, color
                     is_livre = at_status in ["Livré & Payé", "Livré (Dette)"]
-                    w_stats = get_warranty_stats(dev.get("atelier_date_sortie", "")) if is_livre else None
+                    w_stats = get_warranty_stats(dev.get("atelier_date_sortie","")) if is_livre else None
                 elif s == "confirme":
-                    status_text = "✅ مؤكد - قيد المعالجة"
-                    status_color = "#10b981"
-                    progress = 20
-                    is_livre = False
-                    w_stats = None
+                    status_text, status_color, progress = "✅ مؤكد", "#10b981", 20
+                    is_livre, w_stats = False, None
                 else:
-                    status_text = "⏳ لم يدفع بعد"
-                    status_color = "#f59e0b"
-                    progress = 5
-                    is_livre = False
-                    w_stats = None
-
+                    status_text, status_color, progress = "⏳ لم يدفع بعد", "#f59e0b", 5
+                    is_livre, w_stats = False, None
+                
                 fault_short = str(fault)[:50] + ('...' if len(str(fault)) > 50 else '')
-
-                card_html = f'''<div style="background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:15px;margin-bottom:12px;transition:transform 0.3s,box-shadow 0.3s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 8px 25px rgba(0,0,0,0.3)';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none';'>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-<div><strong style="color:#f1f5f9;font-size:1rem;">💻 {brand} - {model}</strong><span style="color:#94a3b8;font-size:0.75rem;display:block;">🎫 {dev_id}</span></div>
-<span style="background:{status_color}25;color:{status_color};padding:5px 12px;border-radius:15px;font-weight:bold;font-size:0.8rem;">{status_text}</span></div>
-<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:#94a3b8;font-size:0.7rem;">تقدم الإصلاح</span><span style="color:{status_color};font-weight:bold;font-size:0.75rem;">{progress}%</span></div>
-<div style="background:rgba(255,255,255,0.1);height:6px;border-radius:3px;overflow:hidden;"><div style="background:{status_color};width:{progress}%;height:100%;border-radius:3px;transition:width 0.5s;"></div></div></div>
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="color:#cbd5e1;font-size:0.85rem;">📌 {fault_short}</span><span style="color:#4ade80;font-weight:bold;font-size:0.9rem;">💰 {prix:,} دج</span></div>
-<span style="color:#64748b;font-size:0.7rem;">📅 {created}</span>'''
-
+                card = f'''<div style="background:rgba(255,255,255,0.06);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:15px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;margin-bottom:12px;"><div><strong style="color:#f1f5f9;">💻 {brand} - {model}</strong><span style="color:#94a3b8;font-size:0.75rem;display:block;">🎫 {dev_id}</span></div><span style="background:{status_color}25;color:{status_color};padding:5px 12px;border-radius:15px;font-weight:bold;font-size:0.8rem;">{status_text}</span></div><div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;margin-bottom:3px;"><span style="color:#94a3b8;font-size:0.7rem;">تقدم الإصلاح</span><span style="color:{status_color};font-weight:bold;font-size:0.75rem;">{progress}%</span></div><div style="background:rgba(255,255,255,0.1);height:6px;border-radius:3px;overflow:hidden;"><div style="background:{status_color};width:{progress}%;height:100%;border-radius:3px;"></div></div></div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><span style="color:#cbd5e1;font-size:0.85rem;">📌 {fault_short}</span><span style="color:#4ade80;font-weight:bold;font-size:0.9rem;">💰 {prix:,} دج</span></div>'''
                 if is_livre and w_stats:
                     if w_stats["is_expired"]:
-                        card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;"><span style="color:#ef4444;font-weight:bold;font-size:0.8rem;">🔴 انتهى الضمان</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">منذ {abs(w_stats['days_left'])} يوم</span></div>'''
+                        card += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;text-align:center;"><span style="color:#ef4444;font-weight:bold;font-size:0.8rem;">🔴 انتهى الضمان</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">منذ {abs(w_stats['days_left'])} يوم</span></div>'''
                     else:
-                        card_html += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;text-align:center;"><span style="color:#22c55e;font-weight:bold;font-size:0.8rem;">🟢 الضمان ساري</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">متبقي {w_stats['days_left']} يوم</span><div style="background:rgba(255,255,255,0.1);height:4px;border-radius:2px;overflow:hidden;margin-top:5px;"><div style="background:#22c55e;width:{w_stats['percent']}%;height:100%;border-radius:2px;"></div></div></div>'''
+                        card += f'''<div style="margin-top:10px;padding:8px 12px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;text-align:center;"><span style="color:#22c55e;font-weight:bold;font-size:0.8rem;">🟢 الضمان ساري</span><span style="color:#94a3b8;font-size:0.7rem;display:block;">متبقي {w_stats['days_left']} يوم</span><div style="background:rgba(255,255,255,0.1);height:4px;border-radius:2px;overflow:hidden;margin-top:5px;"><div style="background:#22c55e;width:{w_stats['percent']}%;height:100%;border-radius:2px;"></div></div></div>'''
+                card += '</div>'
+                st.markdown(card, unsafe_allow_html=True)
+    
+    with tab2:
+        if not historique_devices: st.info("📭 لا توجد أجهزة في الأرشيف.")
+        else:
+            for dev in historique_devices:
+                dev_id = dev.get("ticket_id", "---")
+                brand, model = dev.get("brand", dev.get("atelier_marque", "")), dev.get("model", "")
+                fault = dev.get("fault", "")
+                prix = dev.get("atelier_prix", 0)
+                date_sortie = dev.get("atelier_date_sortie", "")
+                w_stats = get_warranty_stats(date_sortie)
+                st.markdown(f"""<div style="background:#fff;border:1px solid #e5e7eb;border-right:4px solid #6b7280;padding:15px;border-radius:8px;margin-bottom:10px;opacity:0.8;"><div style="display:flex;justify-content:space-between;"><strong style="color:#6b7280;">💻 {brand} - {model}</strong><span style="color:#6b7280;font-weight:bold;">📦 أرشيف</span></div><p style="color:#64748b;margin:5px 0;">📌 {fault} | 🎫 #{dev_id}</p><p style="color:#94a3b8;font-size:0.8rem;">💰 {prix:,} دج | 📅 سلم: {date_sortie} | انتهى الضمان منذ {abs(w_stats['days_left']) if w_stats else '?'} يوم</p></div>""", unsafe_allow_html=True)
+    
+    with tab3:
+        st.markdown("### ➕ طلب صيانة جديد")
+        with st.form("new_req"):
+            brand = st.text_input("العلامة *"); model = st.text_input("الموديل *")
+            dtype = st.selectbox("النوع", APP_CONFIG["SUPPORTED_DEVICE_TYPES"])
+            fault = st.text_area("المشكلة *", height=80)
+            if st.form_submit_button("📤 إرسال", use_container_width=True, type="primary"):
+                if not all([brand, model, fault]): st.error("❌ املأ الحقول")
+                else:
+                    db.save_demande({"phone":phone,"client_name":name,"telegram_id":telegram_id,"brand":brand,"model":model,"device_type":dtype,"fault":fault,"status":"en_attente","created_at":datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")})
+                    st.success("✅ تم! الحالة: لم يدفع بعد"); st.balloons(); time.sleep(1); st.rerun()
 
-                card_html += '</div>'
-                st.markdown(card_html, unsafe_allow_html=True)
+# ===== رئيسي =====
 def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
-    
     db = get_db()
     if db.is_connected:
-        db.increment_total_visitors()   # <-- يزيد العداد مع كل تحميل للصفحة
-    
+        db.increment_total_visitors()
     if not db.is_connected:
         st.error("❌ تعذر الاتصال"); st.stop()
-    
     page = st.session_state.get("page", "accueil")
-    pages = {"accueil":render_accueil,"login":render_login,"register":render_register,"dashboard":render_dashboard}
+    pages = {"accueil":render_accueil, "login":render_login, "register":render_register, "dashboard":render_dashboard}
     pages.get(page, render_accueil)()
+
 if __name__ == "__main__":
     main()
