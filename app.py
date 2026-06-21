@@ -213,11 +213,10 @@ def render_login():
                     else:
                         db = get_db()
                         client = db.get_client_by_phone(n)
-                        if client and client.get("verified"):
+                        if client:
                             tg_id = client.get("telegram_id", "")
-                            if not tg_id or tg_id in ["", "nan", "None"]:
-                                st.warning("⚠️ حسابك غير مربوط بـ Telegram. الرجاء التواصل مع الدعم.")
-                            else:
+                            if tg_id and tg_id not in ["", "nan", "None"]:
+                                # ✅ مربوط بـ Telegram - أرسل OTP جديد
                                 otp = str(random.randint(1000, 9999))
                                 db.update_data(f"clients/{client['_id']}", {"otp": otp})
                                 send_otp_to_client(tg_id, otp)
@@ -225,8 +224,10 @@ def render_login():
                                 st.session_state["login_otp"] = otp
                                 st.session_state["login_otp_sent"] = True
                                 st.success("✅ تم إرسال رمز التحقق"); st.rerun()
+                            else:
+                                st.warning("⚠️ حسابك غير مربوط بـ Telegram. افتح البوت وارسل /start لربطه.")
                         else:
-                            st.error("❌ لا يوجد حساب مفعل. الرجاء إنشاء حساب جديد.")
+                            st.error("❌ لا يوجد حساب. أنشئ حساباً جديداً.")
         if st.button("⬅️ العودة", key="back_login1", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
     else:
@@ -264,7 +265,6 @@ def render_login():
         with col_back:
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"; st.rerun()
-
 # ===== الصفحة الرئيسية (نسخة كاملة مع عدد الزوار في الشريط) =====
 def render_accueil():
     db = get_db()
@@ -489,8 +489,7 @@ def render_accueil():
                         <span style="font-size:1.3rem;">{icon}</span>
                         <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
                         <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
-# ===== التسجيل =====
-# ===== التسجيل (معدل بالكامل) =====
+# ===== التسجيل (معدل) =====
 def render_register():
     st.markdown("### ✨ إنشاء حساب جديد")
     st.markdown("""<div style="background:#fef3c7;border:1px solid #f59e0b;padding:15px;border-radius:10px;margin-bottom:20px;text-align:right;">
@@ -551,17 +550,18 @@ def render_register():
                     if len(n) < 10: st.error("❌ رقم غير صالح")
                     else:
                         db = get_db()
-                        # 1. التحقق من جدول العملاء الجدد
                         existing_client = db.get_client_by_phone(n)
                         if existing_client:
-                            st.warning("⚠️ هذا الرقم مسجل بالفعل. يمكنك الدخول مباشرة.")
+                            tg_id = existing_client.get("telegram_id", "")
+                            if tg_id and tg_id not in ["", "nan", "None"]:
+                                # الرقم موجود ومربوط - يمكنه الدخول مباشرة
+                                st.warning("⚠️ هذا الرقم مسجل بالفعل. يمكنك الدخول مباشرة من صفحة الدخول.")
+                            else:
+                                # الرقم موجود لكن غير مربوط - يتابع للربط
+                                st.info("ℹ️ الرقم موجود لكنه غير مربوط. امسح الكود للربط.")
+                                st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
                         else:
-                            # 2. التحقق من جدول الورشة (atelier)
-                            atelier_devices = db.get_user_devices(n)
-                            if atelier_devices:
-                                st.warning("⚠️ هذا الرقم موجود في سجلات الورشة. تم إنشاء حسابك تلقائياً. يمكنك الدخول بعد ربط التلغرام.")
-                                # يمكنك هنا إنشاء حساب تلقائي أو الطلب منه ربط التلغرام
-                            # 3. إذا لم يوجد في أي مكان، يتابع التسجيل
+                            # رقم جديد - يتابع للربط
                             st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
         if st.button("⬅️ العودة", key="back_reg2", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
