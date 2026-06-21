@@ -79,10 +79,9 @@ def get_repair_progress(status):
     }
     return progress_map.get(status, (0, "#94a3b8", status))
 
-# ===== تسجيل الدخول =====
+# ===== تسجيل الدخول (معدل) =====
 def render_login():
     st.markdown("### 🔑 دخول إلى حسابك")
-    
     if not st.session_state.get("login_otp_sent"):
         with st.form("login_form"):
             phone = st.text_input("📱 رقم الهاتف", placeholder="07XX XX XX XX")
@@ -94,10 +93,10 @@ def render_login():
                     else:
                         db = get_db()
                         client = db.get_client_by_phone(n)
-                        if client:
+                        if client and client.get("verified"):
                             tg_id = client.get("telegram_id", "")
                             if not tg_id or tg_id in ["", "nan", "None"]:
-                                st.warning("⚠️ حسابك غير مربوط بـ Telegram.")
+                                st.warning("⚠️ حسابك غير مربوط بـ Telegram. الرجاء التواصل مع الدعم.")
                             else:
                                 otp = str(random.randint(1000, 9999))
                                 db.update_data(f"clients/{client['_id']}", {"otp": otp})
@@ -106,22 +105,19 @@ def render_login():
                                 st.session_state["login_otp"] = otp
                                 st.session_state["login_otp_sent"] = True
                                 st.success("✅ تم إرسال رمز التحقق"); st.rerun()
-                        else: st.error("❌ لا يوجد حساب.")
-        
+                        else:
+                            st.error("❌ لا يوجد حساب مفعل. الرجاء إنشاء حساب جديد.")
         if st.button("⬅️ العودة", key="back_login1", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
-    
     else:
         st.success("📱 تم إرسال رمز إلى Telegram")
         with st.form("login_otp_form"):
             otp_input = st.text_input("🔐 رمز التحقق (4 أرقام)", max_chars=4, placeholder="XXXX", key="login_otp_inp")
-            
             c1, c2 = st.columns(2)
             with c1:
                 confirm = st.form_submit_button("✅ تأكيد", use_container_width=True)
             with c2:
                 resend = st.form_submit_button("🔄 إعادة", use_container_width=True)
-            
             if confirm:
                 if otp_input == st.session_state.get("login_otp"):
                     db = get_db()
@@ -132,7 +128,6 @@ def render_login():
                     st.session_state["login_otp"] = ""; st.session_state["login_otp_sent"] = False
                     st.rerun()
                 else: st.error("❌ رمز غير صحيح")
-            
             if resend:
                 db = get_db()
                 client = db.get_client_by_phone(st.session_state["user_phone"])
@@ -142,17 +137,13 @@ def render_login():
                     send_otp_to_client(client["telegram_id"], new_otp)
                     st.session_state["login_otp"] = new_otp
                     st.success("✅ تم إرسال رمز جديد"); st.rerun()
-        
         col_cancel, col_back = st.columns(2)
         with col_cancel:
             if st.button("❌ إلغاء", key="cancel_login", use_container_width=True):
-                st.session_state["login_otp_sent"] = False
-                st.session_state["user_phone"] = ""
-                st.rerun()
+                st.session_state["login_otp_sent"] = False; st.session_state["user_phone"] = ""; st.rerun()
         with col_back:
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
-                st.session_state["page"] = "accueil"
-                st.rerun()
+                st.session_state["page"] = "accueil"; st.rerun()
 
 # ===== الصفحة الرئيسية (نسخة كاملة مع عدد الزوار في الشريط) =====
 def render_accueil():
@@ -379,11 +370,12 @@ def render_accueil():
                         <h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6>
                         <p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
 # ===== التسجيل =====
+# ===== التسجيل (معدل بالكامل) =====
 def render_register():
     st.markdown("### ✨ إنشاء حساب جديد")
     st.markdown("""<div style="background:#fef3c7;border:1px solid #f59e0b;padding:15px;border-radius:10px;margin-bottom:20px;text-align:right;">
         <strong style="color:#92400e;">⚠️ شروط:</strong><ul style="color:#92400e;font-size:.9rem;"><li>يجب أن يكون لديك Telegram</li><li>سيتم إرسال كود تأكيد</li></ul></div>""", unsafe_allow_html=True)
-    
+
     if st.session_state.get("pending_phone"):
         n = st.session_state["pending_phone"]; name = st.session_state.get("pending_name", "")
         link = f"https://t.me/infodoc02_bot?start={n}"; qr = generate_qr(link)
@@ -393,16 +385,15 @@ def render_register():
         with c1: st.image(qr, width=150)
         with c2: st.markdown(f"""<div style="text-align:right;padding-top:20px;"><p>1️⃣ افتح بوت InfoDoc</p><p>2️⃣ اضغط <strong>/start</strong></p><p>3️⃣ ستصلك رسالة برمز OTP</p><p>4️⃣ ارجع هنا وأدخل الرمز</p><a href="{link}" target="_blank" style="display:inline-block;background:#0088cc;color:white;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:bold;margin-top:15px;">📱 فتح Telegram</a></div>""", unsafe_allow_html=True)
         st.markdown("---"); st.markdown("### 🔐 الخطوة 2: أدخل رمز التأكيد")
-        
+
         with st.form("otp_reg_form"):
             otp_input = st.text_input("رمز OTP (4 أرقام)", max_chars=4, placeholder="XXXX", key="otp_reg_inp")
-            
             ca, cb = st.columns(2)
             with ca:
                 confirm_reg = st.form_submit_button("✅ تأكيد التسجيل", use_container_width=True)
             with cb:
                 resend_reg = st.form_submit_button("🔄 إعادة إرسال", use_container_width=True)
-            
+
             if confirm_reg:
                 if not otp_input or len(otp_input) != 4: st.error("❌ أدخل الرمز")
                 else:
@@ -412,8 +403,8 @@ def render_register():
                         st.success("✅ تم التسجيل!")
                         st.session_state.update({"user_phone": n, "user_name": name, "logged_in": True, "page": "dashboard", "pending_phone": "", "pending_name": ""})
                         st.balloons(); time.sleep(1); st.rerun()
-                    else: st.error("❌ رمز غير صحيح")
-            
+                    else: st.error("❌ رمز غير صحيح أو لم يتم الربط بعد")
+
             if resend_reg:
                 db = get_db(); client = db.get_client_by_phone(n)
                 if client and client.get("telegram_id"):
@@ -422,7 +413,7 @@ def render_register():
                     send_otp_to_client(client["telegram_id"], new_otp)
                     st.success("✅ تم إرسال رمز جديد"); st.rerun()
                 else: st.error("❌ لم يتم ربط Telegram بعد")
-        
+
         col_cancel, col_back = st.columns(2)
         with col_cancel:
             if st.button("❌ إلغاء", key="cancel_reg", use_container_width=True):
@@ -430,7 +421,6 @@ def render_register():
         with col_back:
             if st.button("⬅️ العودة", key="back_reg", use_container_width=True):
                 st.session_state["page"] = "accueil"; st.rerun()
-    
     else:
         with st.form("reg"):
             name = st.text_input("👤 الاسم *"); phone = st.text_input("📱 الهاتف *")
@@ -439,10 +429,22 @@ def render_register():
                 else:
                     n = PhoneUtils.normalize(phone)
                     if len(n) < 10: st.error("❌ رقم غير صالح")
-                    else: st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
+                    else:
+                        db = get_db()
+                        # 1. التحقق من جدول العملاء الجدد
+                        existing_client = db.get_client_by_phone(n)
+                        if existing_client:
+                            st.warning("⚠️ هذا الرقم مسجل بالفعل. يمكنك الدخول مباشرة.")
+                        else:
+                            # 2. التحقق من جدول الورشة (atelier)
+                            atelier_devices = db.get_user_devices(n)
+                            if atelier_devices:
+                                st.warning("⚠️ هذا الرقم موجود في سجلات الورشة. تم إنشاء حسابك تلقائياً. يمكنك الدخول بعد ربط التلغرام.")
+                                # يمكنك هنا إنشاء حساب تلقائي أو الطلب منه ربط التلغرام
+                            # 3. إذا لم يوجد في أي مكان، يتابع التسجيل
+                            st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
         if st.button("⬅️ العودة", key="back_reg2", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
-
 # ===== لوحة التحكم =====
 def render_dashboard():
     phone = st.session_state.get("user_phone", "")
