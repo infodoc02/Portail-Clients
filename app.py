@@ -17,6 +17,7 @@ from services.phone_utils import PhoneUtils
 st.set_page_config(page_title="InfoDoc - Portail Client", page_icon="🛠️", layout="wide", initial_sidebar_state="collapsed")
 # ===== تشغيل بوت التلغرام (نسخة البوابة) ====
 import telebot
+import threading
 from telebot import types
 
 def run_portal_bot():
