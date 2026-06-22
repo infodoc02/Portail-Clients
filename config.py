@@ -39,5 +39,12 @@ THEME_COLORS = {
     "PRIMARY": "#2563eb",
     "SUCCESS": "#10b981",
     "WARNING": "#f59e0b",
-    "DANGER": "#ef4444"
+    "DANGER": "#ef4444",
+    "LIGHT": "#f1f5f9",
+    "MUTED": "#94a3b8",
+    "GOLD": "#eab308",
+    "PINK": "#ec4899",
+    "ACCENT": "#f43f5e",
+    "INFO": "#3498db",
+    "SECONDARY": "#8b5cf6"
 }
