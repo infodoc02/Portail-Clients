@@ -186,7 +186,7 @@ def render_accueil():
                 if val: val["_id"] = key; off_list.append(val)
             off_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             if off_list:
-                st.markdown("### 🎉 عروض خاصة")
+                st.markdown("<h3 style='text-align: center;'>🎉 عروض خاصة</h3>", unsafe_allow_html=True)
                 cols = st.columns(min(len(off_list), 4))
                 for i, off in enumerate(off_list[:4]):
                     badge_color = off.get('badge_color', '#dc2626')
