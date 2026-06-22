@@ -15,6 +15,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import APP_CONFIG, FIREBASE_PATHS
+from services.phone_utils import PhoneUtils
 
 
 class FirebaseService:
@@ -120,19 +121,23 @@ class FirebaseService:
             return False
     
     # ===== دوال خاصة بالبوابة =====
-    
+
+    @staticmethod
+    def _extract_phone(record: Dict) -> str:
+        for key in ("Telephone", "telephone", "phone", "Phone"):
+            val = record.get(key)
+            if val not in (None, "", "nan", "None"):
+                return str(val)
+        return ""
+
     def get_client_by_phone(self, phone: str) -> Optional[Dict]:
         """البحث عن عميل في جدول clients - تطابق تام أو آخر 9 أرقام"""
         clients = self.get_data(FIREBASE_PATHS["CLIENTS"]) or {}
-        search = str(phone).replace(" ", "").replace(".0", "").strip()
-        
         for key, val in clients.items():
             if not val:
                 continue
-            db_phone = str(val.get("phone", "")).replace(" ", "").replace(".0", "").strip()
-            
-            # تطابق تام أو آخر 9 أرقام
-            if db_phone == search or db_phone[-9:] == search[-9:]:
+            db_phone = self._extract_phone(val)
+            if db_phone and PhoneUtils.compare(db_phone, phone):
                 val["_id"] = key
                 return val
         return None
@@ -142,16 +147,16 @@ class FirebaseService:
         existing = self.get_client_by_phone(phone)
         if existing and existing.get("_id"):
             self.update_data(f"{FIREBASE_PATHS['CLIENTS']}/{existing['_id']}", {
-                "name": name,
-                "telegram_id": telegram_id or existing.get("telegram_id", ""),
+                "Client": name,
+                "Telegram_ID": telegram_id or existing.get("telegram_id", ""),
                 "updated_at": datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")
             })
             return existing["_id"]
         else:
             return self.push_data(FIREBASE_PATHS["CLIENTS"], {
-                "phone": phone,
-                "name": name,
-                "telegram_id": telegram_id,
+                "Telephone": phone,
+                "Client": name,
+                "Telegram_ID": telegram_id,
                 "created_at": datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])).strftime("%Y-%m-%d %H:%M")
             })
     
@@ -159,20 +164,41 @@ class FirebaseService:
         """جلب طلبات عميل من جدول demandes"""
         demandes = self.get_data(FIREBASE_PATHS["DEMANDES"]) or {}
         result = []
-        search = str(phone).replace(" ", "").strip()[-9:]
         for key, val in demandes.items():
-            db_phone = str(val.get("phone", "")).replace(" ", "").strip()
-            if db_phone[-9:] == search:
+            if not val:
+                continue
+            db_phone = self._extract_phone(val)
+            if db_phone and PhoneUtils.compare(db_phone, phone):
                 val["_id"] = key
                 result.append(val)
+        result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return result
     
     def save_demande(self, data: Dict) -> Optional[str]:
         """حفظ طلب صيانة جديد"""
-        return self.push_data(FIREBASE_PATHS["DEMANDES"], data)
+        payload = dict(data)
+        # تعيين الدور كـ admin افتراضياً
+        if "Role" not in payload:
+            payload["Role"] = "admin"
+        # نسخ رقم الهاتف إلى حقل Telephone إن وُجد
+        if payload.get("phone") and not payload.get("Telephone"):
+            payload["Telephone"] = payload["phone"]
+        return self.push_data(FIREBASE_PATHS["DEMANDES"], payload)
+    
+    def delete_data(self, path: str) -> bool:
+        if not self.is_connected:
+            return False
+        try:
+            ref = self.get_reference(path)
+            if ref:
+                ref.delete()
+                return True
+            return False
+        except Exception as e:
+            st.error(f"❌ Erreur suppression {path}: {e}")
+            return False
     
     def get_user_devices(self, phone: str) -> List[Dict]:
-        """جلب أجهزة من atelier"""
         all_data = self.get_data(FIREBASE_PATHS["ATELIER"])
         devices = []
         if all_data:
@@ -184,6 +210,8 @@ class FirebaseService:
                 if db_phone[-9:] == search:
                     device = dict(value)
                     device["_id"] = key
+                    # حقل Decision بدون قيمة افتراضية (قد يكون None)
+                    device["Decision"] = value.get("Decision")
                     devices.append(device)
         return devices
     
