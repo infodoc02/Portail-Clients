@@ -39,12 +39,15 @@ def notify_admin(text):
         except Exception:
             pass
 
-# ===== التهيئة =====
 def init_session():
     defaults = {
         "page": "accueil", "user_phone": "", "user_name": "", "logged_in": False,
         "pending_phone": "", "pending_name": "", "login_otp": "", "login_otp_sent": False,
         "editing_req_id": "",
+        "terms_accepted": False,
+        "show_terms": False,
+        "reg_name": "",
+        "reg_phone": "",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -186,20 +189,20 @@ def render_accueil():
                 if val: val["_id"] = key; off_list.append(val)
             off_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             if off_list:
-                st.markdown("<h3 style='text-align: center;'>🎉 عروض خاصة</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='text-align:right; direction:rtl;'> 🎉 عـروض خاصـة</h3>", unsafe_allow_html=True)
                 cols = st.columns(min(len(off_list), 4))
                 for i, off in enumerate(off_list[:4]):
                     badge_color = off.get('badge_color', '#dc2626')
                     with cols[i]:
                         st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;"><span style="background:{badge_color};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span><h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4><p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p></div><style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
         else:
-            st.markdown("<h3 style='text-align: center;'>🎉 عروض خاصة</h3>", unsafe_allow_html=True)
+            st.markdown(f"<h3 style='text-align:right; direction:rtl;'> 🎉 عـروض خاصـة</h3>", unsafe_allow_html=True)
             o1, o2 = st.columns(2)
             with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
             with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
 
         # تابعنا
-        st.markdown("<h3 style='text-align: center;'>🌐 تابعنا على</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='text-align:right; direction:rtl;'> 🌐 تـابعنـا على</h3>", unsafe_allow_html=True)
         s1, s2, s3, s4 = st.columns(4)
         with s1: st.markdown("""<a href="https://facebook.com/InfoDoc" target="_blank" style="text-decoration:none;"><div style="background:#1877f2;color:white;padding:12px;border-radius:10px;text-align:center;"><span style="font-size:1.3rem;">📘</span><p style="margin:3px 0 0 0;font-weight:bold;">Facebook</p></div></a>""", unsafe_allow_html=True)
         with s2: st.markdown(f"""<a href="{bot_link()}" target="_blank" style="text-decoration:none;"><div style="background:#0088cc;color:white;padding:12px;border-radius:10px;text-align:center;"><span style="font-size:1.3rem;">✈️</span><p style="margin:3px 0 0 0;font-weight:bold;">Telegram</p></div></a>""", unsafe_allow_html=True)
@@ -216,11 +219,11 @@ def render_accueil():
             ("📋 الخدمات المكتبية", [("📄","الطباعة والنسخ","مستندات، تصوير"),("📝","الخدمات الإدارية","سير ذاتية، ترجمة"),("📊","خدمات رقمية","PowerPoint، إدخال"),("📧","خدمات الإنترنت","Emails، تحميل")]),
         ]
         for section_title, services in sections:
-            st.markdown(f"#### {section_title}")
+            st.markdown(f"<h4 style='text-align:right; direction:rtl;'>{section_title}</h4>", unsafe_allow_html=True)
             cols = st.columns(3)
             for i, (icon, title, desc) in enumerate(services):
                 with cols[i % 3]:
-                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;transition:transform 0.3s,background 0.3s;" onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';"><span style="font-size:1.3rem;">{icon}</span><h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6><p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;transition:transform 0.3s,background 0.3s;direction:rtl;" onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';"><span style="font-size:1.3rem;">{icon}</span><h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6><p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
 
 # ===== تسجيل الدخول =====
 def render_login():
@@ -299,10 +302,64 @@ def render_login():
             if st.button("⬅️ العودة", key="back_login2", use_container_width=True):
                 st.session_state["page"] = "accueil"; st.rerun()
 
-# ===== التسجيل =====
+# ===== التسجيل (مع نافذة الشروط) =====
+@st.dialog("⚠️ شروط التسجيل")
+def terms_dialog():
+    st.markdown("""
+    <div style="background: #ffffff; padding: 20px; border-radius: 12px; direction: rtl; text-align: right;">
+        <h4>📋 شروط التسجيل والخدمة</h4>
+        <ol style="line-height: 2; font-size: 0.95rem;">
+            <li><strong>رسوم الفحص:</strong> إذا تم فحص الجهاز وتبين أنه قابل للتصليح ورفض الزبون، يدفع <strong style="color: #dc2626;">1000 دج</strong> كرسوم فحص.</li>
+            <li><strong>أسعار المكونات:</strong> تبدأ من <strong style="color: #dc2626;">3000 دج</strong> للبطاقة الأم.</li>
+            <li><strong>البرمجة والبيوس:</strong> تبدأ من <strong style="color: #dc2626;">1500 دج</strong>.</li>
+            <li><strong>الموافقة التلقائية:</strong> للتكاليف بين <strong style="color: #dc2626;">3000-4000 دج</strong>، نقوم بالإصلاح مباشرة.</li>
+            <li><strong>الضمان:</strong> <strong style="color: #16a34a;">30 يوماً</strong> على العيب المُصلح فقط.</li>
+            <li><strong>الخصوصية:</strong> بياناتك محمية وتستخدم فقط للتواصل.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
+
+    accept = st.checkbox("✅ أوافق على جميع الشروط والأحكام", key="terms_checkbox")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✅ موافق", use_container_width=True, type="primary"):
+            if accept:
+                st.session_state.terms_accepted = True
+                st.session_state.show_terms = False
+                name = st.session_state.get("reg_name")
+                phone = st.session_state.get("reg_phone")
+                if name and phone:
+                    db = get_db()
+                    existing_client = db.get_client_by_phone(phone)
+                    atelier_devices = db.get_user_devices(phone)
+                    if existing_client and (existing_client.get("Telegram_ID") or existing_client.get("telegram_id")):
+                        st.warning("⚠️ هذا الرقم مسجل بالفعل ومربوط. يمكنك الدخول مباشرة.")
+                    elif existing_client or atelier_devices:
+                        st.info("ℹ️ الرقم موجود لكنه غير مربوط. امسح الكود للربط.")
+                        st.session_state["pending_phone"] = phone
+                        st.session_state["pending_name"] = name
+                    else:
+                        st.session_state["pending_phone"] = phone
+                        st.session_state["pending_name"] = name
+                st.rerun()
+            else:
+                st.error("يجب الموافقة على الشروط")
+    with col2:
+        if st.button("❌ إلغاء", use_container_width=True):
+            st.session_state.show_terms = False
+            st.rerun()
+
+
 def render_register():
-    st.markdown("### ✨ إنشاء حساب جديد")
+    st.markdown(f"<h3 style='text-align:right; direction:rtl;'> ✨ إنشاء حساب جديد</h3>", unsafe_allow_html=True)
     st.markdown("""<div style="background:#fef3c7;border:1px solid #f59e0b;padding:15px;border-radius:10px;margin-bottom:20px;text-align:right;"><strong style="color:#92400e;">⚠️ شروط:</strong><ul style="color:#92400e;font-size:.9rem;"><li>يجب أن يكون لديك Telegram</li><li>سيتم إرسال كود تأكيد</li></ul></div>""", unsafe_allow_html=True)
+
+    # إذا كانت نافذة الشروط مفتوحة
+    if st.session_state.get("show_terms"):
+        terms_dialog()
+        return
+
     if st.session_state.get("pending_phone"):
         n = st.session_state["pending_phone"]; name = st.session_state.get("pending_name", "")
         link = bot_link(n); qr = generate_qr(link)
@@ -351,24 +408,42 @@ def render_register():
             if st.button("⬅️ العودة", key="back_reg", use_container_width=True):
                 st.session_state["page"] = "accueil"; st.rerun()
     else:
+        # توجيه عناوين الحقول لليمين
+        st.markdown("""
+        <style>
+        div[data-testid="stForm"] label {
+            direction: rtl !important;
+            text-align: right !important;
+            display: block !important;
+            width: 100% !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         with st.form("reg"):
-            name = st.text_input("👤 الاسم *"); phone = st.text_input("📱 الهاتف *")
-            if st.form_submit_button("📱 متابعة", use_container_width=True, type="primary"):
-                if not name or not phone: st.error("❌ املأ الحقول")
+            name = st.text_input("👤 الاســم "); phone = st.text_input("📱 الهـاتـف ")
+            if st.form_submit_button("📱 متـابـعة", use_container_width=True, type="primary"):
+                if not name or not phone: st.error("❌ امـلأ الحقـول")
                 else:
                     n = PhoneUtils.normalize(phone)
-                    if len(n) < 10: st.error("❌ رقم غير صالح")
+                    if len(n) < 10: st.error("❌ رقـم غيـر صـالح")
                     else:
-                        db = get_db()
-                        existing_client = db.get_client_by_phone(n)
-                        atelier_devices = db.get_user_devices(n)
-                        if existing_client and (existing_client.get("Telegram_ID") or existing_client.get("telegram_id")):
-                            st.warning("⚠️ هذا الرقم مسجل بالفعل ومربوط. يمكنك الدخول مباشرة من صفحة الدخول.")
-                        elif existing_client or atelier_devices:
-                            st.info("ℹ️ الرقم موجود لكنه غير مربوط. امسح الكود للربط.")
-                            st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
+                        # إذا لم يسبق له قبول الشروط
+                        if not st.session_state.get("terms_accepted"):
+                            st.session_state["show_terms"] = True
+                            st.session_state["reg_name"] = name
+                            st.session_state["reg_phone"] = n
+                            st.rerun()
                         else:
-                            st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
+                            db = get_db()
+                            existing_client = db.get_client_by_phone(n)
+                            atelier_devices = db.get_user_devices(n)
+                            if existing_client and (existing_client.get("Telegram_ID") or existing_client.get("telegram_id")):
+                                st.warning("⚠️ هذا الرقم مسجل بالفعل ومربوط. يمكنك الدخول مباشرة من صفحة الدخول.")
+                            elif existing_client or atelier_devices:
+                                st.info("ℹ️ الرقم موجود لكنه غير مربوط. امسح الكود للربط.")
+                                st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
+                            else:
+                                st.session_state["pending_phone"] = n; st.session_state["pending_name"] = name; st.rerun()
         if st.button("⬅️ العودة", key="back_reg2", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
 
@@ -379,7 +454,7 @@ def render_dashboard():
     
     col_title, col_logout = st.columns([4, 1])
     with col_title:
-        st.markdown(f"### 👋 مرحباً {name}")
+        st.markdown(f"<h3 style='text-align:right; direction:rtl;'>👋 مرحباً {name}</h3>", unsafe_allow_html=True)
     with col_logout:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 خروج", use_container_width=True, type="secondary"):
