@@ -306,18 +306,19 @@ def render_login():
 @st.dialog("⚠️ شروط التسجيل")
 def terms_dialog():
     st.markdown("""
-    <div style="background: #ffffff; padding: 20px; border-radius: 12px; direction: rtl; text-align: right;">
-        <h4>📋 شروط التسجيل والخدمة</h4>
-        <ol style="line-height: 2; font-size: 0.95rem;">
-            <li><strong>رسوم الفحص:</strong> إذا تم فحص الجهاز وتبين أنه قابل للتصليح ورفض الزبون، يدفع <strong style="color: #dc2626;">1000 دج</strong> كرسوم فحص.</li>
-            <li><strong>أسعار المكونات:</strong> تبدأ من <strong style="color: #dc2626;">3000 دج</strong> للبطاقة الأم.</li>
-            <li><strong>البرمجة والبيوس:</strong> تبدأ من <strong style="color: #dc2626;">1500 دج</strong>.</li>
-            <li><strong>الموافقة التلقائية:</strong> للتكاليف بين <strong style="color: #dc2626;">3000-4000 دج</strong>، نقوم بالإصلاح مباشرة.</li>
-            <li><strong>الضمان:</strong> <strong style="color: #16a34a;">30 يوماً</strong> على العيب المُصلح فقط.</li>
-            <li><strong>الخصوصية:</strong> بياناتك محمية وتستخدم فقط للتواصل.</li>
-        </ol>
-    </div>
-    """, unsafe_allow_html=True)
+        <div style="background: #ffffff; padding: 20px; border-radius: 12px; direction: rtl; text-align: right;">
+            <h4>📋 شروط التسجيل والخدمة</h4>
+            <ol style="line-height: 2; font-size: 0.95rem;">
+                <li><strong>تكاليف الفحص :</strong> إن كان الجهاز قابل للإصلاح ولكن العميل يرفض، فهو ملزم بدفع مبلغ <strong style="color: #dc2626;">1000 دج</strong> كرسوم الفحص .</li>
+                <li><strong>أسعار العمل على البطاقة الأم:</strong> تبدأ تكاليفها من <strong style="color: #dc2626;">3000 دج</strong> و تزداد حسب نوع العطل.</li>
+                <li><strong>أعمال البرمجة والبيوس:</strong> خدمات فلاش البيوس وفك التشفير  تبدأ من <strong style="color: #dc2626;">2000 دج</strong>.</li>
+                <li><strong>الموافقة التلقائية:</strong> للتكاليف التي  تكون قيمتها <strong style="color: #dc2626;">4000 دج</strong>، نقوم بالإصلاح مباشرة دون الرجوع للعميل توفيرًا للوقت.</li>
+                <li><strong>الضمان:</strong> نقدم ضمانًا لمدة <strong style="color: #16a34a;">30 يومًا</strong> على العيب الذي تم إصلاحه فقط، ولا يشمل أي عطل يظهر لاحقا.</li>
+                <li><strong>الصبر :</strong> التشخيص الدقيق يستغرق وقتًا كافيًا، لذلك نرجو التحلي بالصبر وتجنب الإكثار من الإتصال من أجل الإستفسار عن تقدم الصيانة فهذه المنصة وضعت من أجل خدمتكم في هذا الشأن, .</li>
+                <li><strong>الخصوصية:</strong> جميع بياناتك محمية بالكامل وتستخدم فقط لأغراض التواصل والخدمة.</li>
+            </ol>
+        </div>
+        """, unsafe_allow_html=True)
 
     accept = st.checkbox("✅ أوافق على جميع الشروط والأحكام", key="terms_checkbox")
 
