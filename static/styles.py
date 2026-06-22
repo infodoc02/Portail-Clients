@@ -2,6 +2,7 @@
 """أنماط CSS لبوابة العملاء"""
 import base64
 import os
+from config import THEME_COLORS
 
 def get_main_css() -> str:
     bg_image_base64 = ""
@@ -107,5 +108,22 @@ def get_main_css() -> str:
         }}
         .stAlert {{ background: rgba(30,41,59,0.8) !important; color: #f1f5f9 !important; }}
         .streamlit-expanderHeader {{ color: #f1f5f9 !important; }}
+
+        /* جعل جميع النصوص داخل نوافذ الحوار (st.dialog) سوداء */
+        div[data-testid="stDialog"] * {{
+            color: #000000 !important;
+        }}
+
+        /* Toast — نص أسود */
+        [data-testid="stToast"],
+        [data-testid="stToast"] *,
+        div[data-testid="stToast"] p,
+        div[data-testid="stToast"] span {{
+            color: #1e293b !important;
+        }}
+        [data-testid="stToast"] {{
+            background: rgba(255, 255, 255, 0.95) !important;
+            border: 1px solid rgba(0, 0, 0, 0.1) !important;
+        }}
     </style>
     """
