@@ -1,62 +1,68 @@
 # services/telegram_bot.py
-"""بوت Telegram مع مستمع Firebase مدمج - يعملان مرة واحدة فقط"""
+"""بوت Telegram مع قفل ملف آمن وإعادة محاولة تلقائية"""
 
 import threading
 import time
 import random
 import os
 import tempfile
-import atexit
-from datetime import datetime
-
 import requests
 import streamlit as st
 import telebot
 from telebot import types
+from datetime import datetime
 
 from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
-# --- نظام قفل الملفات ---
-def _acquire_lock(lock_name: str) -> bool:
-    lock_file = os.path.join(tempfile.gettempdir(), f"infodoc_{lock_name}.lock")
-    try:
-        if os.path.exists(lock_file):
-            try:
-                with open(lock_file, 'r') as f:
-                    pid = int(f.read().strip())
-                os.kill(pid, 0)
-                print(f"⚠️ {lock_name}: instance already running with PID {pid}")
-                return False
-            except (OSError, ValueError):
-                os.remove(lock_file)
-        with open(lock_file, 'w') as f:
-            f.write(str(os.getpid()))
-        atexit.register(_release_lock, lock_file)
-        return True
-    except Exception as e:
-        print(f"⚠️ Could not acquire lock for {lock_name}: {e}")
-        return False
+# ===== متغيرات عامة =====
+_BOT_THREAD = None
+_LOCK_FILE = os.path.join(tempfile.gettempdir(), "infodoc_bot.lock")
 
-def _release_lock(lock_file: str):
+def _acquire_lock() -> bool:
+    """محاولة الحصول على القفل، مع انتظار حتى 10 ثوانٍ إذا كان القفل موجوداً"""
+    for _ in range(10):  # 10 محاولات كل 1 ثانية
+        try:
+            if os.path.exists(_LOCK_FILE):
+                with open(_LOCK_FILE, "r") as f:
+                    pid = int(f.read().strip())
+                # التحقق مما إذا كانت العملية لا تزال تعمل
+                try:
+                    os.kill(pid, 0)
+                    # العملية لا تزال تعمل، ننتظر
+                    time.sleep(1)
+                    continue
+                except (OSError, ProcessLookupError):
+                    # العملية ماتت، نزيل القفل القديم
+                    os.remove(_LOCK_FILE)
+            # إنشاء القفل الجديد
+            with open(_LOCK_FILE, "w") as f:
+                f.write(str(os.getpid()))
+            return True
+        except Exception as e:
+            print(f"⚠️ فشل الحصول على القفل: {e}")
+            time.sleep(1)
+    return False
+
+def _release_lock():
     try:
-        if os.path.exists(lock_file):
-            os.remove(lock_file)
+        if os.path.exists(_LOCK_FILE):
+            os.remove(_LOCK_FILE)
     except:
         pass
 
-# --- دوال البوت الأساسية ---
+# ===== دوال البوت الأساسية =====
 def _get_token() -> str:
     return st.secrets.get("TELEGRAM_TOKEN", "")
 
-def _send_status_notification(bot: telebot.TeleBot, chat_id: str, device_data: dict, status: str) -> None:
-    """إرسال إشعار واحد للزبون عند تحديث حالة الجهاز"""
+def _send_status_notification(bot, chat_id, device_data, status):
+    # ... (نفس الكود السابق، لا تغيير)
     try:
         device_id = device_data.get("ID", "غير معروف")
         appareil = device_data.get("Appareil", "")
         panne = device_data.get("Panne", "")
         prix = device_data.get("Prix", "0")
-        
+
         status_messages = {
             "En attente": "⏳ في الانتظار",
             "En Cours": "🔧 قيد الفحص",
@@ -67,9 +73,8 @@ def _send_status_notification(bot: telebot.TeleBot, chat_id: str, device_data: d
             "Livré (Dette)": "📦 تم التسليم بدين",
             "Annulé": "🚫 ملغي",
         }
-        
         status_text = status_messages.get(status, status)
-        
+
         message = (
             f"📱 *تحديث حالة الجهاز*\n\n"
             f"💻 {appareil}\n"
@@ -77,32 +82,28 @@ def _send_status_notification(bot: telebot.TeleBot, chat_id: str, device_data: d
             f"📌 المشكلة: {panne}\n"
             f"📊 الحالة الجديدة: {status_text}\n"
         )
-        
+
         markup = None
         if status == "Réparable":
             message += f"💰 السعر التقديري: {prix} دج\n\n"
-            message += f"🔔 *ملاحظة:* الجهاز قابل للصيانة. يرجى اختيار القبول أو الرفض من الأزرار أدناه أو من حسابك بالمنصة، وليكن في علمك أنه في حالة الرفض ستكون ملزما بدفع 1000 دج تكاليف الوقت و الفحص.\n"
+            message += (
+                f"🔔 *ملاحظة:* الجهاز قابل للصيانة. يرجى اختيار القبول أو الرفض من الأزرار أدناه أو من حسابك بالمنصة، "
+                f"وليكن في علمك أنه في حالة الرفض ستكون ملزماً بدفع 1000 دج تكاليف الوقت و الفحص.\n"
+            )
             markup = types.InlineKeyboardMarkup(row_width=2)
-            accept_btn = types.InlineKeyboardButton(
-                "✅ قبول التصليح",
-                callback_data=f"ACCEPT_REPAIR_{device_id}"
-            )
-            reject_btn = types.InlineKeyboardButton(
-                "❌ رفض التصليح",
-                callback_data=f"REJECT_REPAIR_{device_id}"
-            )
+            accept_btn = types.InlineKeyboardButton("✅ قبول التصليح", callback_data=f"ACCEPT_REPAIR_{device_id}")
+            reject_btn = types.InlineKeyboardButton("❌ رفض التصليح", callback_data=f"REJECT_REPAIR_{device_id}")
             markup.add(accept_btn, reject_btn)
-        
+
         if markup:
             bot.send_message(chat_id, message, parse_mode="Markdown", reply_markup=markup)
         else:
             bot.send_message(chat_id, message, parse_mode="Markdown")
     except Exception as e:
-        print(f"❌ Error sending notification: {e}")
+        print(f"❌ خطأ في إرسال الإشعار: {e}")
 
-# ✅ الدالة العامة لإرسال إشعار من أي مكان (مطلوبة في app.py)
-def notify_customer_status_change(device_id: str, new_status: str, db_service) -> bool:
-    """دالة عامة لإرسال إشعار للزبون عند تغيير حالة الجهاز - تستخدم من الخارج"""
+def notify_customer_status_change(device_id, new_status, db_service):
+    # ... (نفس الكود السابق)
     try:
         token = _get_token()
         if not token:
@@ -134,10 +135,11 @@ def notify_customer_status_change(device_id: str, new_status: str, db_service) -
         _send_status_notification(bot, telegram_id, device_data, new_status)
         return True
     except Exception as e:
-        print(f"❌ Error in notify_customer_status_change: {e}")
+        print(f"❌ خطأ في notify_customer_status_change: {e}")
         return False
 
-def _register_handlers(bot: telebot.TeleBot, db_service):
+# ===== تسجيل المعالجات =====
+def _register_handlers(bot, db_service):
     @bot.callback_query_handler(func=lambda call: True)
     def handle_callback(call):
         try:
@@ -163,12 +165,14 @@ def _register_handlers(bot: telebot.TeleBot, db_service):
                                     chat_id=chat_id,
                                     message_id=call.message.message_id,
                                     text=f"✅ *تم قبول التصليح*\n\n💻 {app}\n🎫 Ticket: {device_id}\n💰 السعر: {prix} دج\n\nسيتم إبلاغ الورشة بموافقتك.",
-                                    parse_mode="Markdown"
+                                    parse_mode="Markdown",
                                 )
                                 if admin_id:
-                                    bot.send_message(admin_id,
+                                    bot.send_message(
+                                        admin_id,
                                         f"✅ *موافقة على التصليح*\n👤 {client}\n🎫 {device_id}\n💻 {app}\n💰 {prix} دج",
-                                        parse_mode="Markdown")
+                                        parse_mode="Markdown",
+                                    )
                                 return
 
             elif data.startswith("REJECT_REPAIR_"):
@@ -189,12 +193,14 @@ def _register_handlers(bot: telebot.TeleBot, db_service):
                                     chat_id=chat_id,
                                     message_id=call.message.message_id,
                                     text=f"❌ *تم رفض التصليح*\n\n💻 {app}\n🎫 Ticket: {device_id}\n\n⚠️ *ملاحظة مهمة:* ستكون ملزماً بدفع 1000 دج حق الفحص.\n\nسيتم إبلاغ الورشة برفضك.",
-                                    parse_mode="Markdown"
+                                    parse_mode="Markdown",
                                 )
                                 if admin_id:
-                                    bot.send_message(admin_id,
+                                    bot.send_message(
+                                        admin_id,
                                         f"❌ *رفض التصليح*\n👤 {client}\n🎫 {device_id}\n💻 {app}",
-                                        parse_mode="Markdown")
+                                        parse_mode="Markdown",
+                                    )
                                 return
 
             bot.answer_callback_query(call.id, "❌ لم يتم العثور على الجهاز")
@@ -327,24 +333,25 @@ def _register_handlers(bot: telebot.TeleBot, db_service):
         except Exception as e:
             print(f"Contact error: {e}")
 
-# --- البوت مع المستمع المدمج ---
+# ===== الوظيفة الرئيسية للبوت (مع إعادة محاولة 409) =====
 def _bot_main():
     token = _get_token()
     if not token:
         print("⚠️ TELEGRAM_TOKEN مفقود")
         return
 
+    # حذف webhook
+    try:
+        requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
+        time.sleep(1)
+    except:
+        pass
+
     db_service = get_firebase_service()
     bot = telebot.TeleBot(token)
     _register_handlers(bot, db_service)
 
-    # حذف webhook قديم
-    try:
-        requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
-    except:
-        pass
-
-    # --- المستمع الداخلي ---
+    # المستمع الداخلي
     previous_statuses = {}
     current_data = db_service.get_data("atelier")
     if current_data:
@@ -391,13 +398,13 @@ def _bot_main():
     threading.Thread(target=listener, daemon=True).start()
     print("🤖 بوت InfoDoc مع المستمع يعمل...")
 
-    # البولينج الرئيسي
+    # حلقة polling مع إعادة محاولة 409
     while True:
         try:
             bot.polling(none_stop=True, interval=1, timeout=20)
         except Exception as e:
             if "409" in str(e) or "Conflict" in str(e):
-                print("⚠️ Conflict, waiting 30s...")
+                print("⚠️ تعارض 409 - سيتم إعادة المحاولة بعد 30 ثانية...")
                 time.sleep(30)
                 try:
                     requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
@@ -409,9 +416,11 @@ def _bot_main():
 
     stop_event.set()
 
+# ===== دالة بدء البوت الآمنة =====
 def start_telegram_bot():
-    """تشغيل البوت بخيط منفصل مرة واحدة فقط"""
-    if not _acquire_lock("telegram_bot"):
+    """تشغيل البوت مرة واحدة فقط مع قفل ملف"""
+    if not _acquire_lock():
+        print("ℹ️ بوت Telegram يعمل بالفعل (قفل موجود).")
         return
     threading.Thread(target=_bot_main, daemon=True, name="InfoDocBot").start()
     print("✅ Bot thread started.")
