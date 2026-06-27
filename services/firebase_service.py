@@ -1,6 +1,6 @@
 # services/firebase_service.py
 """
-خدمة Firebase - تستعمل نفس قاعدة بيانات التطبيق الرئيسي
+خدمة Firebase - نفس قاعدة بيانات التطبيق الرئيسي
 جداول جديدة: clients, demandes
 """
 
@@ -120,6 +120,19 @@ class FirebaseService:
             st.error(f"❌ Erreur mise à jour {path}: {e}")
             return False
     
+    def delete_data(self, path: str) -> bool:
+        if not self.is_connected:
+            return False
+        try:
+            ref = self.get_reference(path)
+            if ref:
+                ref.delete()
+                return True
+            return False
+        except Exception as e:
+            st.error(f"❌ Erreur suppression {path}: {e}")
+            return False
+    
     # ===== دوال خاصة بالبوابة =====
 
     @staticmethod
@@ -177,28 +190,14 @@ class FirebaseService:
     def save_demande(self, data: Dict) -> Optional[str]:
         """حفظ طلب صيانة جديد"""
         payload = dict(data)
-        # تعيين الدور كـ admin افتراضياً
         if "Role" not in payload:
             payload["Role"] = "admin"
-        # نسخ رقم الهاتف إلى حقل Telephone إن وُجد
         if payload.get("phone") and not payload.get("Telephone"):
             payload["Telephone"] = payload["phone"]
         return self.push_data(FIREBASE_PATHS["DEMANDES"], payload)
     
-    def delete_data(self, path: str) -> bool:
-        if not self.is_connected:
-            return False
-        try:
-            ref = self.get_reference(path)
-            if ref:
-                ref.delete()
-                return True
-            return False
-        except Exception as e:
-            st.error(f"❌ Erreur suppression {path}: {e}")
-            return False
-    
     def get_user_devices(self, phone: str) -> List[Dict]:
+        """جلب أجهزة الورشة الخاصة بعميل"""
         all_data = self.get_data(FIREBASE_PATHS["ATELIER"])
         devices = []
         if all_data:
@@ -210,23 +209,10 @@ class FirebaseService:
                 if db_phone[-9:] == search:
                     device = dict(value)
                     device["_id"] = key
-                    # حقل Decision بدون قيمة افتراضية (قد يكون None)
                     device["Decision"] = value.get("Decision")
                     devices.append(device)
         return devices
     
-    def track_visitor(self):
-        if not self.is_connected:
-            return
-        try:
-            tz = pytz.timezone(APP_CONFIG["TIMEZONE"])
-            today = datetime.now(tz).strftime('%Y-%m-%d')
-            ref = self.get_reference(f"{FIREBASE_PATHS['STATS_VISITORS']}/{today}")
-            if ref:
-                ref.transaction(lambda c: (c or 0) + 1)
-        except:
-            pass
-
     def increment_total_visitors(self):
         """زيادة عداد الزوار الإجمالي (يُستدعى مع كل تحميل للصفحة)"""
         if not self.is_connected:
@@ -237,6 +223,10 @@ class FirebaseService:
         except Exception:
             pass
 
+# ============================================================
+# ✅ الدالة المطلوبة لاستيرادها من app.py (مع التخزين المؤقت)
+# ============================================================
 @st.cache_resource
 def get_firebase_service() -> FirebaseService:
+    """إرجاع كائن الخدمة مع التخزين المؤقت (يتم إنشاؤه مرة واحدة فقط)"""
     return FirebaseService()
