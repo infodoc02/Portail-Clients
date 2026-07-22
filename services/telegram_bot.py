@@ -21,21 +21,17 @@ _LOCK_FILE = os.path.join(tempfile.gettempdir(), "infodoc_bot.lock")
 
 def _acquire_lock() -> bool:
     """محاولة الحصول على القفل، مع انتظار حتى 10 ثوانٍ إذا كان القفل موجوداً"""
-    for _ in range(10):  # 10 محاولات كل 1 ثانية
+    for _ in range(10):
         try:
             if os.path.exists(_LOCK_FILE):
                 with open(_LOCK_FILE, "r") as f:
                     pid = int(f.read().strip())
-                # التحقق مما إذا كانت العملية لا تزال تعمل
                 try:
                     os.kill(pid, 0)
-                    # العملية لا تزال تعمل، ننتظر
                     time.sleep(1)
                     continue
                 except (OSError, ProcessLookupError):
-                    # العملية ماتت، نزيل القفل القديم
                     os.remove(_LOCK_FILE)
-            # إنشاء القفل الجديد
             with open(_LOCK_FILE, "w") as f:
                 f.write(str(os.getpid()))
             return True
@@ -56,7 +52,6 @@ def _get_token() -> str:
     return st.secrets.get("TELEGRAM_TOKEN", "")
 
 def _send_status_notification(bot, chat_id, device_data, status):
-    # ... (نفس الكود السابق، لا تغيير)
     try:
         device_id = device_data.get("ID", "غير معروف")
         appareil = device_data.get("Appareil", "")
@@ -103,7 +98,7 @@ def _send_status_notification(bot, chat_id, device_data, status):
         print(f"❌ خطأ في إرسال الإشعار: {e}")
 
 def notify_customer_status_change(device_id, new_status, db_service):
-    # ... (نفس الكود السابق)
+    """إرسال إشعار للعميل بتغيير الحالة (يمكن استخدامها من لوحة الإدارة)"""
     try:
         token = _get_token()
         if not token:
@@ -160,6 +155,9 @@ def _register_handlers(bot, db_service):
                                 app = v.get("Appareil", "")
                                 prix = v.get("Prix", "0")
 
+                                # ✅ تحديث القرار في قاعدة البيانات
+                                ref_at.child(k).update({"Decision": "accept"})
+
                                 bot.answer_callback_query(call.id, "✅ تم إرسال موافقتك")
                                 bot.edit_message_text(
                                     chat_id=chat_id,
@@ -187,6 +185,9 @@ def _register_handlers(bot, db_service):
                             if v and str(v.get("ID")) == device_id:
                                 client = v.get("Client", "غير معروف")
                                 app = v.get("Appareil", "")
+
+                                # ✅ تحديث القرار في قاعدة البيانات
+                                ref_at.child(k).update({"Decision": "reject", "Statut": "Annulé", "Prix": 1000})
 
                                 bot.answer_callback_query(call.id, "ℹ️ تم إبلاغ الورشة برفضك")
                                 bot.edit_message_text(
@@ -218,6 +219,7 @@ def _register_handlers(bot, db_service):
                     bot.send_message(chat_id, "❌ رقم الهاتف غير صالح")
                     return
                 otp = str(random.randint(1000, 9999))
+                otp_expiry = (datetime.now().replace(microsecond=0) + timedelta(minutes=5)).isoformat()
                 found = False
 
                 ref_at = db_service.get_reference("atelier")
@@ -241,6 +243,7 @@ def _register_handlers(bot, db_service):
                         ref_cl.child(existing[0]).update({
                             "Telegram_ID": chat_id,
                             "otp": otp,
+                            "otp_expiry": otp_expiry,
                             "verified": False,
                             "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         })
@@ -251,6 +254,7 @@ def _register_handlers(bot, db_service):
                             "Telegram_ID": chat_id,
                             "Client": "",
                             "otp": otp,
+                            "otp_expiry": otp_expiry,
                             "verified": False,
                             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         })
@@ -259,7 +263,7 @@ def _register_handlers(bot, db_service):
                 if found:
                     bot.send_message(
                         chat_id,
-                        f"🔐 *رمز التحقق:* `{otp}`\n\n📱 ارجع إلى البوابة وأدخل الرمز.",
+                        f"🔐 *رمز التحقق:* `{otp}`\n\n📱 ارجع إلى البوابة وأدخل الرمز (صالحة 5 دقائق).",
                         parse_mode="Markdown",
                     )
                 else:
@@ -284,6 +288,7 @@ def _register_handlers(bot, db_service):
                 bot.send_message(chat_id, "❌ رقم غير صالح")
                 return
             otp = str(random.randint(1000, 9999))
+            otp_expiry = (datetime.now().replace(microsecond=0) + timedelta(minutes=5)).isoformat()
             found = False
 
             ref_at = db_service.get_reference("atelier")
@@ -307,6 +312,7 @@ def _register_handlers(bot, db_service):
                     ref_cl.child(existing[0]).update({
                         "Telegram_ID": chat_id,
                         "otp": otp,
+                        "otp_expiry": otp_expiry,
                         "verified": False,
                         "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     })
@@ -317,6 +323,7 @@ def _register_handlers(bot, db_service):
                         "Telegram_ID": chat_id,
                         "Client": "",
                         "otp": otp,
+                        "otp_expiry": otp_expiry,
                         "verified": False,
                         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                     })
@@ -325,7 +332,7 @@ def _register_handlers(bot, db_service):
             if found:
                 bot.send_message(
                     chat_id,
-                    f"🔐 *رمز التحقق:* `{otp}`\n\n📱 ارجع إلى البوابة وأدخل الرمز.",
+                    f"🔐 *رمز التحقق:* `{otp}`\n\n📱 ارجع إلى البوابة وأدخل الرمز (صالحة 5 دقائق).",
                     parse_mode="Markdown",
                 )
             else:
