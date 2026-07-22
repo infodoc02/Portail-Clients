@@ -37,10 +37,7 @@ class FirebaseService:
     def _connect(self) -> bool:
         try:
             if not firebase_admin._apps:
-                # ✅ طريقة مضمونة 100% لقراءة المفتاح
                 private_key = st.secrets["firebase"]["private_key"]
-                
-                # إصلاح المفتاح إذا كان فيه \\n
                 if "\\n" in private_key:
                     private_key = private_key.replace("\\n", "\n")
                 
@@ -65,14 +62,9 @@ class FirebaseService:
             
         except KeyError as e:
             st.error(f"❌ مفتاح ناقص في secrets.toml: {e}")
-            st.write("المفاتيح المتوفرة:", list(st.secrets.keys()))
-            if "firebase" in st.secrets:
-                st.write("مفاتيح firebase:", list(st.secrets["firebase"].keys()))
             return False
         except Exception as e:
             st.error(f"❌ Erreur connexion Firebase: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
             return False
     
     @property
@@ -137,7 +129,8 @@ class FirebaseService:
 
     @staticmethod
     def _extract_phone(record: Dict) -> str:
-        for key in ("Telephone", "telephone", "phone", "Phone"):
+        """استخراج رقم الهاتف من السجل بغض النظر عن اسم الحقل"""
+        for key in ("Telephone", "telephone", "phone", "Phone", "Téléphone", "téléphone"):
             val = record.get(key)
             if val not in (None, "", "nan", "None"):
                 return str(val)
