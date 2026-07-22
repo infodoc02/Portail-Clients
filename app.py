@@ -3,11 +3,11 @@
 
 import streamlit as st
 import sys, os, pytz, json, requests, time, random
-from datetime import datetime
+from datetime import datetime, timedelta  # <-- إضافة timedelta
 import qrcode
 from io import BytesIO
 import base64
-from PIL import Image  # لضغط الصور
+from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import APP_CONFIG
@@ -23,17 +23,14 @@ def compress_background():
     bg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "background.jpg")
     if os.path.exists(bg_path):
         size = os.path.getsize(bg_path)
-        # إذا كان حجمها أكبر من 500 كيلوبايت، نضغطها
         if size > 500 * 1024:
             try:
                 img = Image.open(bg_path)
                 img = img.convert("RGB")
-                # تغيير الحجم لـ 1920 عرض مع الحفاظ على النسبة
                 if img.width > 1920:
                     ratio = 1920 / img.width
                     new_size = (1920, int(img.height * ratio))
                     img = img.resize(new_size, Image.Resampling.LANCZOS)
-                # حفظ بجودة 75%
                 img.save(bg_path, format="JPEG", quality=75, optimize=True)
                 print("✅ تم ضغط background.jpg تلقائياً")
             except Exception as e:
@@ -71,8 +68,8 @@ def init_session():
         "show_terms": False,
         "reg_name": "",
         "reg_phone": "",
-        "visitor_counted": False,  # ✅ جديد: لمنع تكرار عداد الزوار
-        "data_loaded": False,      # ✅ جديد: لمنع تكرار جلب البيانات الثقيلة
+        "visitor_counted": False,
+        "data_loaded": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -100,9 +97,9 @@ def send_otp_to_client(telegram_id, otp):
     return False
 
 # ================================================================
-# 🔥 دوال التخزين المؤقت (Caching) - حل البطء رقم 1
+# 🔥 دوال التخزين المؤقت (Caching)
 # ================================================================
-@st.cache_data(ttl=600)  # 10 دقائق
+@st.cache_data(ttl=600)
 def get_cached_shop_settings():
     db = get_db()
     return db.get_data("shop_settings") or {}
@@ -119,7 +116,6 @@ def get_cached_offres():
 
 @st.cache_data(ttl=300)
 def get_cached_atelier_devices(phone: str):
-    """جلب أجهزة الورشة الخاصة بعميل معين مع تخزين مؤقت"""
     db = get_db()
     return db.get_user_devices(phone)
 
@@ -128,16 +124,23 @@ def get_cached_client_demandes(phone: str):
     db = get_db()
     return db.get_client_demandes(phone)
 
-def clear_cache():
-    """مسح الكاش عند تسجيل الخروج أو تغيير كبير"""
-    get_cached_shop_settings.clear()
-    get_cached_annonces.clear()
-    get_cached_offres.clear()
-    get_cached_atelier_devices.clear()
-    get_cached_client_demandes.clear()
+# ===== تحسين clear_cache لمسح الكاش الخاص بالعميل فقط =====
+def clear_cache(phone: str = None):
+    """مسح الكاش. إذا تم تمرير رقم هاتف، يمسح كاش ذلك العميل فقط."""
+    if phone:
+        # مسح كاش العميل فقط
+        get_cached_atelier_devices.clear()
+        get_cached_client_demandes.clear()
+    else:
+        # مسح كل الكاش (عند تسجيل الخروج)
+        get_cached_shop_settings.clear()
+        get_cached_annonces.clear()
+        get_cached_offres.clear()
+        get_cached_atelier_devices.clear()
+        get_cached_client_demandes.clear()
 
 # ================================================================
-# دوال مساعدة (غير متغيرة)
+# دوال مساعدة
 # ================================================================
 def get_warranty_stats(date_sortie_str):
     if not date_sortie_str or str(date_sortie_str).strip() in ["", "---", "None", "nan"]:
@@ -171,7 +174,6 @@ def get_repair_progress(status):
     }
     return progress_map.get(status, (0, "#94a3b8", status))
 
-# ===== الصفحة الرئيسية (مع استخدام الكاش) =====
 def render_accueil():
     db = get_db()
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "ico.ico")
@@ -182,7 +184,6 @@ def render_accueil():
     else:
         logo_img = '<span style="font-size:2.5rem;">💻</span>'
 
-    # ✅ استخدام البيانات المخزنة مؤقتاً
     shop_status = get_cached_shop_settings()
     is_open = shop_status.get("is_open", True)
 
@@ -191,7 +192,6 @@ def render_accueil():
     else:
         status_badge = '<span style="background:#ef4444;color:white;padding:4px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse 2s infinite;">🔴 مغلق</span>'
 
-    # ✅ عداد الزوار (مرة واحدة لكل جلسة)
     if not st.session_state.get("visitor_counted"):
         db.increment_total_visitors()
         st.session_state["visitor_counted"] = True
@@ -230,7 +230,6 @@ def render_accueil():
             if st.button("✨ إنشاء حساب جديد", use_container_width=True): st.session_state["page"] = "register"; st.rerun()
         st.markdown("---")
 
-        # ✅ الإعلانات من الكاش
         annonces = get_cached_annonces()
         if annonces:
             ann_list = []
@@ -249,7 +248,6 @@ def render_accueil():
                 ann_js = f'<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{{margin:0;padding:0;background:transparent;}}.marquee-container{{overflow:hidden;white-space:nowrap;background:{bg};border:2px solid {border};border-radius:10px;padding:10px 0;margin-bottom:15px;}}.marquee-content{{display:inline-block;white-space:nowrap;color:{text_c};font-weight:bold;font-size:1rem;position:relative;will-change:transform;}}.marquee-content span{{margin:0 60px;}}</style></head><body><div class="marquee-container"><div class="marquee-content" id="marquee"><span>{full_text}</span><span>{full_text}</span></div></div><script>(function(){{var marquee=document.getElementById("marquee");var container=marquee.parentElement;var speed=0.5;var pos=-marquee.offsetWidth/2;function step(){{pos+=speed;if(pos>=container.offsetWidth){{pos=-marquee.offsetWidth/2;}}marquee.style.transform="translateX("+pos+"px)";requestAnimationFrame(step);}}step();}})();</script></body></html>'
                 st.components.v1.html(ann_js, height=70, scrolling=False)
 
-        # ✅ العروض من الكاش
         offres = get_cached_offres()
         if offres:
             off_list = []
@@ -264,13 +262,11 @@ def render_accueil():
                     with cols[i]:
                         st.markdown(f"""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-{i} 2s ease-in-out infinite;"><span style="background:{badge_color};color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">{off.get('badge','🔥')}</span><h4 style="margin:10px 0 5px 0;font-size:0.95rem;color:#f1f5f9;">{off.get('title','')}</h4><p style="font-weight:bold;margin:0;font-size:0.9rem;color:#4ade80;">{off.get('price','')}</p></div><style>@keyframes bounce-{i}{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-8px)}}}}@keyframes pulse-badge{{0%,100%{{transform:scale(1)}}50%{{transform:scale(1.08)}}}}</style>""", unsafe_allow_html=True)
         else:
-            # عرض افتراضي
             st.markdown(f"<h3 style='text-align:right; direction:rtl;'> 🎉 عـروض خاصـة</h3>", unsafe_allow_html=True)
             o1, o2 = st.columns(2)
             with o1: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-1 2s ease-in-out infinite;"><span style="background:#dc2626;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">🔥 عرض خاص</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">خصم 20% على الصيانة</h4><p style="font-weight:bold;color:#4ade80;">2500 دج بدلاً من 3500 دج</p></div><style>@keyframes bounce-1{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
             with o2: st.markdown("""<div style="background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2);padding:18px;border-radius:15px;text-align:center;min-height:110px;animation:bounce-2 2.5s ease-in-out infinite;"><span style="background:#2563eb;color:white;padding:5px 14px;border-radius:20px;font-size:0.8rem;font-weight:bold;animation:pulse-badge 1.5s ease-in-out infinite;">💎 عرض VIP</span><h4 style="margin:10px 0 5px 0;color:#f1f5f9;">فحص مجاني + تنظيف</h4><p style="font-weight:bold;color:#4ade80;">مع كل خدمة</p></div><style>@keyframes bounce-2{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes pulse-badge{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}</style>""", unsafe_allow_html=True)
 
-        # تابعنا
         st.markdown(f"<h3 style='text-align:right; direction:rtl;'> 🌐 تـابعنـا على</h3>", unsafe_allow_html=True)
         s1, s2, s3, s4 = st.columns(4)
         with s1: st.markdown("""<a href="https://facebook.com/InfoDoc" target="_blank" style="text-decoration:none;"><div style="background:#1877f2;color:white;padding:12px;border-radius:10px;text-align:center;"><span style="font-size:1.3rem;">📘</span><p style="margin:3px 0 0 0;font-weight:bold;">Facebook</p></div></a>""", unsafe_allow_html=True)
@@ -294,9 +290,7 @@ def render_accueil():
                 with cols[i % 3]:
                     st.markdown(f"""<div style="background:rgba(255,255,255,0.08);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.12);padding:10px 8px;border-radius:10px;margin-bottom:6px;text-align:center;transition:transform 0.3s,background 0.3s;direction:rtl;" onmouseover="this.style.transform='translateY(-3px)';this.style.background='rgba(255,255,255,0.15)';" onmouseout="this.style.transform='translateY(0)';this.style.background='rgba(255,255,255,0.08)';"><span style="font-size:1.3rem;">{icon}</span><h6 style="color:#f1f5f9;margin:3px 0;font-size:0.8rem;font-weight:700;">{title}</h6><p style="color:#cbd5e1;font-size:0.7rem;margin:0;line-height:1.3;">{desc}</p></div>""", unsafe_allow_html=True)
 
-# ================================================================
-# دوال تسجيل الدخول والتسجيل (كما هي، لكن مع تعديلات بسيطة)
-# ================================================================
+# ===== تسجيل الدخول =====
 def render_login():
     st.markdown("### 🔑 دخول إلى حسابك")
     if not st.session_state.get("login_otp_sent"):
@@ -314,7 +308,8 @@ def render_login():
                             tg_id = client.get("Telegram_ID", client.get("telegram_id", ""))
                             if tg_id and tg_id not in ["", "nan", "None"]:
                                 otp = str(random.randint(1000, 9999))
-                                db.update_data(f"clients/{client['_id']}", {"otp": otp})
+                                otp_expiry = (datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])) + timedelta(minutes=5)).isoformat()
+                                db.update_data(f"clients/{client['_id']}", {"otp": otp, "otp_expiry": otp_expiry})
                                 send_otp_to_client(tg_id, otp)
                                 st.session_state["user_phone"] = n
                                 st.session_state["login_otp"] = otp
@@ -341,6 +336,16 @@ def render_login():
                 client = db.get_client_by_phone(st.session_state["user_phone"])
                 stored_otp = str(client.get("otp", "")) if client else ""
                 entered_otp = str(otp_input).strip()
+                # التحقق من صلاحية الرمز
+                expiry = client.get("otp_expiry") if client else ""
+                if expiry:
+                    try:
+                        expiry_dt = datetime.fromisoformat(expiry)
+                        if datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])) > expiry_dt:
+                            st.error("❌ انتهت صلاحية الرمز. أعد الإرسال.")
+                            return
+                    except:
+                        pass
                 if entered_otp and (entered_otp == stored_otp or entered_otp == st.session_state.get("login_otp")):
                     st.session_state["user_name"] = client.get("Client", client.get("name", ""))
                     st.session_state["logged_in"] = True
@@ -348,9 +353,9 @@ def render_login():
                     st.session_state["login_otp"] = ""
                     st.session_state["login_otp_sent"] = False
                     if client:
-                        db.update_data(f"clients/{client['_id']}", {"otp": ""})
+                        db.update_data(f"clients/{client['_id']}", {"otp": "", "otp_expiry": ""})
                     notify_admin(f"🔑 دخول عميل\n👤 {st.session_state['user_name']}\n📱 {st.session_state['user_phone']}")
-                    clear_cache()  # مسح الكاش عند الدخول لجلب بيانات حديثة
+                    clear_cache(phone=st.session_state["user_phone"])
                     st.rerun()
                 else:
                     st.error("❌ رمز غير صحيح")
@@ -361,7 +366,8 @@ def render_login():
                     tg_id = client.get("Telegram_ID", client.get("telegram_id", ""))
                     if tg_id and tg_id not in ["", "nan", "None"]:
                         new_otp = str(random.randint(1000, 9999))
-                        db.update_data(f"clients/{client['_id']}", {"otp": new_otp})
+                        new_expiry = (datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])) + timedelta(minutes=5)).isoformat()
+                        db.update_data(f"clients/{client['_id']}", {"otp": new_otp, "otp_expiry": new_expiry})
                         send_otp_to_client(tg_id, new_otp)
                         st.session_state["login_otp"] = new_otp
                         st.toast("✅ تم إرسال رمز جديد", icon="📩")
@@ -451,22 +457,34 @@ def render_register():
                 if not otp_input or len(otp_input) != 4: st.error("❌ أدخل الرمز")
                 else:
                     db = get_db(); client = db.get_client_by_phone(n)
-                    if client and client.get("otp") == otp_input:
-                        db.update_data(f"clients/{client['_id']}", {"Client": name, "verified": True, "otp": ""})
-                        st.toast("✅ تم التسجيل بنجاح!", icon="🎉")
-                        st.session_state.update({"user_phone": n, "user_name": name, "logged_in": True, "page": "dashboard", "pending_phone": "", "pending_name": ""})
-                        st.balloons()
-                        notify_admin(f"🆕 تسجيل جديد\n👤 {name}\n📱 {n}")
-                        clear_cache()
-                        time.sleep(1); st.rerun()
-                    else: st.error("❌ رمز غير صحيح أو لم يتم الربط بعد")
+                    if client:
+                        # التحقق من صلاحية الرمز
+                        expiry = client.get("otp_expiry")
+                        if expiry:
+                            try:
+                                expiry_dt = datetime.fromisoformat(expiry)
+                                if datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])) > expiry_dt:
+                                    st.error("❌ انتهت صلاحية الرمز. أعد الإرسال.")
+                                    return
+                            except:
+                                pass
+                        if client.get("otp") == otp_input:
+                            db.update_data(f"clients/{client['_id']}", {"Client": name, "verified": True, "otp": "", "otp_expiry": ""})
+                            st.toast("✅ تم التسجيل بنجاح!", icon="🎉")
+                            st.session_state.update({"user_phone": n, "user_name": name, "logged_in": True, "page": "dashboard", "pending_phone": "", "pending_name": ""})
+                            st.balloons()
+                            notify_admin(f"🆕 تسجيل جديد\n👤 {name}\n📱 {n}")
+                            clear_cache(phone=n)
+                            time.sleep(1); st.rerun()
+                        else: st.error("❌ رمز غير صحيح أو لم يتم الربط بعد")
             if resend_reg:
                 db = get_db(); client = db.get_client_by_phone(n)
                 if client:
                     tg_id = client.get("Telegram_ID", client.get("telegram_id", ""))
                     if tg_id and tg_id not in ["", "nan", "None"]:
                         new_otp = str(random.randint(1000, 9999))
-                        db.update_data(f"clients/{client['_id']}", {"otp": new_otp})
+                        new_expiry = (datetime.now(pytz.timezone(APP_CONFIG["TIMEZONE"])) + timedelta(minutes=5)).isoformat()
+                        db.update_data(f"clients/{client['_id']}", {"otp": new_otp, "otp_expiry": new_expiry})
                         send_otp_to_client(tg_id, new_otp)
                         st.toast("✅ تم إرسال رمز جديد", icon="📩")
                         st.rerun()
@@ -517,9 +535,7 @@ def render_register():
         if st.button("⬅️ العودة", key="back_reg2", use_container_width=True):
             st.session_state["page"] = "accueil"; st.rerun()
 
-# ================================================================
-# ✅ لوحة التحكم (المصححة بالكامل وإزالة الأخطاء)
-# ================================================================
+# ===== لوحة التحكم =====
 def render_dashboard():
     phone = st.session_state.get("user_phone", "")
     name = st.session_state.get("user_name", "")
@@ -534,18 +550,16 @@ def render_dashboard():
             for k in ["user_phone","user_name","logged_in","login_otp","login_otp_sent"]:
                 st.session_state[k] = "" if k != "logged_in" else False
             st.session_state["page"] = "accueil"
-            clear_cache()
+            clear_cache()  # مسح كل الكاش عند الخروج
             st.rerun()
     
     db = get_db()
     client = db.get_client_by_phone(phone)
     telegram_id = client.get("Telegram_ID", client.get("telegram_id", "")) if client else ""
     
-    # ✅ استخدام الكاش لجلب البيانات
     atelier_devices = get_cached_atelier_devices(phone)
     my_demandes = get_cached_client_demandes(phone)
     
-    # فصل الأجهزة
     active_workshop = []
     historique_workshop = []
     for d in atelier_devices:
@@ -630,13 +644,13 @@ def render_dashboard():
                         if st.button("✅ قبول التصليح", key=f"accept_{doc_id}"):
                             db.update_data(f"atelier/{doc_id}", {"Decision": "accept"})
                             notify_admin(f"🔧 العميل {name} وافق على تصليح {model} (تذكرة #{dev_id})")
-                            clear_cache()  # تحديث الكاش بعد التغيير
+                            clear_cache(phone=phone)
                             st.rerun()
                     with col2:
                         if st.button("❌ رفض التصليح", key=f"reject_{doc_id}"):
                             db.update_data(f"atelier/{doc_id}", {"Decision": "reject", "Statut": "Annulé", "Prix": 1000})
                             notify_admin(f"🔴 العميل {name} رفض تصليح {model} (تذكرة #{dev_id}) – يجب دفع 1000 دج")
-                            clear_cache()
+                            clear_cache(phone=phone)
                             st.rerun()
 
                 if decision == "accept":
@@ -706,7 +720,7 @@ def render_dashboard():
                                     st.session_state["editing_req_id"] = ""
                                     notify_admin(f"✏️ تعديل طلب صيانة\n👤 {name}\n📱 {phone}\n💻 {e_brand} {e_model}\n📌 {e_fault}")
                                     st.toast("✅ تم تحديث الطلب وإرساله!", icon="✏️")
-                                    clear_cache()
+                                    clear_cache(phone=phone)
                                     time.sleep(1)
                                     st.rerun()
                             if cancel_edit:
@@ -723,7 +737,7 @@ def render_dashboard():
                                 db.delete_data(f"demandes/{req_id}")
                                 notify_admin(f"🗑️ إلغاء طلب\n👤 {name}\n📱 {phone}\n💻 {brand} {model}")
                                 st.toast("تم إلغاء الطلب", icon="🗑️")
-                                clear_cache()
+                                clear_cache(phone=phone)
                                 time.sleep(1)
                                 st.rerun()
     
@@ -770,16 +784,15 @@ def render_dashboard():
                     st.toast("✅ تم إرسال الطلب! الحالة: لم يدفع بعد", icon="📥")
                     st.balloons()
                     notify_admin(f"📥 طلب صيانة جديد\n👤 {name}\n📱 {phone}\n💻 {brand} {model}\n📌 {fault}")
-                    clear_cache()
+                    clear_cache(phone=phone)
                     time.sleep(1); st.rerun()
     
-    # ✅ زر العودة للرئيسية
     if st.button("⬅️ العودة للرئيسية"):
         st.session_state["page"] = "accueil"
         st.rerun()
 
 # ================================================================
-# تشغيل البوت (مرة واحدة)
+# تشغيل البوت
 # ================================================================
 @st.cache_resource
 def init_bot_and_listener():
@@ -791,11 +804,8 @@ def main():
     st.markdown(get_main_css(), unsafe_allow_html=True)
     init_session()
     
-    # ❌ تم حذف st_autorefresh نهائياً - حل البطء الأساسي
-    
     db = get_db()
     if db.is_connected:
-        # ✅ زيادة العداد تتم مرة واحدة فقط بفضل المتغير visitor_counted (يتم داخل render_accueil)
         init_bot_and_listener()
     if not db.is_connected:
         st.error("❌ تعذر الاتصال"); st.stop()
