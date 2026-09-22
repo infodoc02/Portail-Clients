@@ -794,10 +794,10 @@ def render_dashboard():
 # ================================================================
 # تشغيل البوت
 # ================================================================
-@st.cache_resource
 def init_bot_and_listener():
-    start_telegram_bot()
-    return True
+    if "client_bot_started" not in st.session_state:
+        start_telegram_bot()
+        st.session_state["client_bot_started"] = True
 
 # ===== الرئيسي =====
 def main():
