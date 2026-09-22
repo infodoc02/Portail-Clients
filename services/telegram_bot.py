@@ -495,7 +495,19 @@ def _bot_main():
 
 # ===== دالة بدء البوت الآمنة =====
 def start_telegram_bot():
-    """تشغيل البوت مرة واحدة فقط مع قفل ملف"""
+    # محاولة إزالة القفل القديم إذا كان صاحبه ميتاً
+    if os.path.exists(_LOCK_FILE):
+        try:
+            with open(_LOCK_FILE, "r") as f:
+                old_pid = int(f.read().strip())
+            try:
+                os.kill(old_pid, 0)
+            except (OSError, ProcessLookupError):
+                os.remove(_LOCK_FILE)
+                print("🧹 تم إزالة قفل قديم")
+        except:
+            try: os.remove(_LOCK_FILE)
+            except: pass
     if not _acquire_lock():
         print("ℹ️ بوت Telegram يعمل بالفعل (قفل موجود).")
         return
