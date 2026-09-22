@@ -354,27 +354,89 @@ def _bot_main():
     token = _get_token()
     if not token:
         print("⚠️ CLIENT_TELEGRAM_TOKEN / TELEGRAM_TOKEN مفقود")
+        _release_lock()
         return
 
     try:
-        requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
+        requests.get(
+            f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true",
+            timeout=5,
+        )
         time.sleep(1)
     except:
         pass
 
-    db_service = get_firebase_service()
-    bot = telebot.TeleBot(token)
-    _register_handlers(bot, db_service)
+    try:
+        db_service = get_firebase_service()
+        bot = telebot.TeleBot(token)
+        _register_handlers(bot, db_service)
 
-    previous_statuses = {}
-    current_data = db_service.get_data("atelier")
-    if current_data:
-        for k, v in current_data.items():
-            if v and v.get("ID"):
-                previous_statuses[v["ID"]] = v.get("Statut", "")
+        previous_statuses = {}
+        current_data = db_service.get_data("atelier")
+        if current_data:
+            for k, v in current_data.items():
+                if v and v.get("ID"):
+                    previous_statuses[v["ID"]] = v.get("Statut", "")
 
-    stop_event = threading.Event()
+        stop_event = threading.Event()
 
+        def listener():
+            nonlocal previous_statuses
+            while not stop_event.is_set():
+                try:
+                    time.sleep(5)
+                    current = db_service.get_data("atelier")
+                    if not current:
+                        continue
+                    for k, v in current.items():
+                        if not v:
+                            continue
+                        device_id = v.get("ID", "")
+                        if not device_id:
+                            continue
+                        new_status = v.get("Statut", "")
+                        old = previous_statuses.get(device_id, "")
+                        if new_status and new_status != old:
+                            previous_statuses[device_id] = new_status
+                            print(f"🔔 تغيير الحالة: {device_id} -> {new_status}")
+                            phone = v.get("Telephone", "")
+                            if phone:
+                                ref_cl = db_service.get_reference("clients")
+                                if ref_cl:
+                                    data_cl = ref_cl.get() or {}
+                                    for ck, cv in data_cl.items():
+                                        if cv and PhoneUtils.compare(cv.get("Telephone", ""), phone):
+                                            tg_id = cv.get("Telegram_ID", cv.get("telegram_id", ""))
+                                            if tg_id:
+                                                _send_status_notification(bot, tg_id, v, new_status)
+                                            break
+                except Exception as e:
+                    print(f"❌ Listener error: {e}")
+                    time.sleep(10)
+
+        threading.Thread(target=listener, daemon=True).start()
+        print("🤖 بوت InfoDoc مع المستمع يعمل...")
+
+        while True:
+            try:
+                bot.polling(none_stop=True, interval=1, timeout=20)
+            except Exception as e:
+                if "409" in str(e) or "Conflict" in str(e):
+                    print("⚠️ تعارض 409 - سيتم إعادة المحاولة بعد 30 ثانية...")
+                    time.sleep(30)
+                    try:
+                        requests.get(
+                            f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true",
+                            timeout=5,
+                        )
+                    except:
+                        pass
+                else:
+                    print(f"Polling error: {e}")
+                    time.sleep(5)
+    finally:
+        stop_event.set()
+        _release_lock()
     def listener():
         nonlocal previous_statuses
         while not stop_event.is_set():
