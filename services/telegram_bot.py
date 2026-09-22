@@ -10,7 +10,7 @@ import requests
 import streamlit as st
 import telebot
 from telebot import types
-from datetime import datetime
+from datetime import datetime, timedelta   # ✅ Correction : ajout de timedelta
 
 from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
@@ -18,6 +18,7 @@ from services.phone_utils import PhoneUtils
 # ===== متغيرات عامة =====
 _BOT_THREAD = None
 _LOCK_FILE = os.path.join(tempfile.gettempdir(), "infodoc_bot.lock")
+
 
 def _acquire_lock() -> bool:
     """محاولة الحصول على القفل، مع انتظار حتى 10 ثوانٍ إذا كان القفل موجوداً"""
@@ -40,6 +41,7 @@ def _acquire_lock() -> bool:
             time.sleep(1)
     return False
 
+
 def _release_lock():
     try:
         if os.path.exists(_LOCK_FILE):
@@ -47,9 +49,15 @@ def _release_lock():
     except:
         pass
 
+
 # ===== دوال البوت الأساسية =====
 def _get_token() -> str:
-    return st.secrets.get("TELEGRAM_TOKEN", "")
+    """Récupère le token du bot portail (CLIENT_TELEGRAM_TOKEN)."""
+    return (
+        st.secrets.get("CLIENT_TELEGRAM_TOKEN")
+        or st.secrets.get("TELEGRAM_TOKEN", "")
+    )
+
 
 def _send_status_notification(bot, chat_id, device_data, status):
     try:
@@ -97,6 +105,7 @@ def _send_status_notification(bot, chat_id, device_data, status):
     except Exception as e:
         print(f"❌ خطأ في إرسال الإشعار: {e}")
 
+
 def notify_customer_status_change(device_id, new_status, db_service):
     """إرسال إشعار للعميل بتغيير الحالة (يمكن استخدامها من لوحة الإدارة)"""
     try:
@@ -133,6 +142,7 @@ def notify_customer_status_change(device_id, new_status, db_service):
         print(f"❌ خطأ في notify_customer_status_change: {e}")
         return False
 
+
 # ===== تسجيل المعالجات =====
 def _register_handlers(bot, db_service):
     @bot.callback_query_handler(func=lambda call: True)
@@ -155,7 +165,6 @@ def _register_handlers(bot, db_service):
                                 app = v.get("Appareil", "")
                                 prix = v.get("Prix", "0")
 
-                                # ✅ تحديث القرار في قاعدة البيانات
                                 ref_at.child(k).update({"Decision": "accept"})
 
                                 bot.answer_callback_query(call.id, "✅ تم إرسال موافقتك")
@@ -186,7 +195,6 @@ def _register_handlers(bot, db_service):
                                 client = v.get("Client", "غير معروف")
                                 app = v.get("Appareil", "")
 
-                                # ✅ تحديث القرار في قاعدة البيانات
                                 ref_at.child(k).update({"Decision": "reject", "Statut": "Annulé", "Prix": 1000})
 
                                 bot.answer_callback_query(call.id, "ℹ️ تم إبلاغ الورشة برفضك")
@@ -340,14 +348,14 @@ def _register_handlers(bot, db_service):
         except Exception as e:
             print(f"Contact error: {e}")
 
+
 # ===== الوظيفة الرئيسية للبوت (مع إعادة محاولة 409) =====
 def _bot_main():
     token = _get_token()
     if not token:
-        print("⚠️ TELEGRAM_TOKEN مفقود")
+        print("⚠️ CLIENT_TELEGRAM_TOKEN / TELEGRAM_TOKEN مفقود")
         return
 
-    # حذف webhook
     try:
         requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
         time.sleep(1)
@@ -358,7 +366,6 @@ def _bot_main():
     bot = telebot.TeleBot(token)
     _register_handlers(bot, db_service)
 
-    # المستمع الداخلي
     previous_statuses = {}
     current_data = db_service.get_data("atelier")
     if current_data:
@@ -405,23 +412,24 @@ def _bot_main():
     threading.Thread(target=listener, daemon=True).start()
     print("🤖 بوت InfoDoc مع المستمع يعمل...")
 
-    # حلقة polling مع إعادة محاولة 409
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=1, timeout=20)
-        except Exception as e:
-            if "409" in str(e) or "Conflict" in str(e):
-                print("⚠️ تعارض 409 - سيتم إعادة المحاولة بعد 30 ثانية...")
-                time.sleep(30)
-                try:
-                    requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
-                except:
-                    pass
-            else:
-                print(f"Polling error: {e}")
-                time.sleep(5)
+    try:
+        while True:
+            try:
+                bot.polling(none_stop=True, interval=1, timeout=20)
+            except Exception as e:
+                if "409" in str(e) or "Conflict" in str(e):
+                    print("⚠️ تعارض 409 - سيتم إعادة المحاولة بعد 30 ثانية...")
+                    time.sleep(30)
+                    try:
+                        requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook?drop_pending_updates=true", timeout=5)
+                    except:
+                        pass
+                else:
+                    print(f"Polling error: {e}")
+                    time.sleep(5)
+    finally:
+        stop_event.set()
 
-    stop_event.set()
 
 # ===== دالة بدء البوت الآمنة =====
 def start_telegram_bot():
