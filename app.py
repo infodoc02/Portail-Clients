@@ -92,11 +92,16 @@ def send_otp_to_client(telegram_id, otp):
         if token and telegram_id:
             requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": telegram_id, "text": f"🔐 *رمز التحقق:* `{otp}`\n\n🛠️ InfoDoc", "parse_mode": "Markdown"},
-                timeout=5
+                json={
+                    "chat_id": telegram_id,
+                    "text": f"🔐 *رمز التحقق:* `{otp}`\n\n🛠️ InfoDoc",
+                    "parse_mode": "Markdown",
+                },
+                timeout=5,
             )
             return True
-    except: pass
+    except:
+        pass
     return False
 
 # ================================================================
