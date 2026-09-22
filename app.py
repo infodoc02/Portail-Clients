@@ -85,7 +85,10 @@ def generate_qr(data: str):
 
 def send_otp_to_client(telegram_id, otp):
     try:
-        token = st.secrets.get("TELEGRAM_TOKEN", "")
+        token = (
+            st.secrets.get("CLIENT_TELEGRAM_TOKEN")
+            or st.secrets.get("TELEGRAM_TOKEN", "")
+        )
         if token and telegram_id:
             requests.post(
                 f"https://api.telegram.org/bot{token}/sendMessage",
