@@ -213,7 +213,7 @@ def render_accueil():
             <div style="display:flex;align-items:center;gap:10px;">{status_badge}</div>
         </div>
         <div style="display:flex;justify-content:center;gap:30px;flex-wrap:wrap;font-size:0.9rem;opacity:0.85;">
-            <span>📱 0798 66 19 00</span>
+            <span>📱 0770 33 05 82</span>
             <span>📍 الشلف - حي بن سونة بجانب المسبح</span>
             <span>🕐 8:00 - 17:00 (السبت - الخميس)</span>
             <span>👥 {total_visits} :زوار المنصة</span>
