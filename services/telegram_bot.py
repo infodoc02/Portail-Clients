@@ -508,6 +508,7 @@ def start_telegram_bot():
         except:
             try: os.remove(_LOCK_FILE)
             except: pass
+
     if not _acquire_lock():
         print("ℹ️ بوت Telegram يعمل بالفعل (قفل موجود).")
         return
