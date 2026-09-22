@@ -10,13 +10,12 @@ import requests
 import streamlit as st
 import telebot
 from telebot import types
-from datetime import datetime, timedelta   # ✅ Correction : ajout de timedelta
+from datetime import datetime, timedelta
 
 from services.firebase_service import get_firebase_service
 from services.phone_utils import PhoneUtils
 
 # ===== متغيرات عامة =====
-_BOT_THREAD = None
 _LOCK_FILE = os.path.join(tempfile.gettempdir(), "infodoc_bot.lock")
 
 
@@ -50,7 +49,6 @@ def _release_lock():
         pass
 
 
-# ===== دوال البوت الأساسية =====
 def _get_token() -> str:
     """Récupère le token du bot portail (CLIENT_TELEGRAM_TOKEN)."""
     return (
@@ -107,7 +105,6 @@ def _send_status_notification(bot, chat_id, device_data, status):
 
 
 def notify_customer_status_change(device_id, new_status, db_service):
-    """إرسال إشعار للعميل بتغيير الحالة (يمكن استخدامها من لوحة الإدارة)"""
     try:
         token = _get_token()
         if not token:
@@ -143,7 +140,6 @@ def notify_customer_status_change(device_id, new_status, db_service):
         return False
 
 
-# ===== تسجيل المعالجات =====
 def _register_handlers(bot, db_service):
     @bot.callback_query_handler(func=lambda call: True)
     def handle_callback(call):
@@ -349,7 +345,6 @@ def _register_handlers(bot, db_service):
             print(f"Contact error: {e}")
 
 
-# ===== الوظيفة الرئيسية للبوت (مع إعادة محاولة 409) =====
 def _bot_main():
     token = _get_token()
     if not token:
@@ -421,7 +416,7 @@ def _bot_main():
                 bot.polling(none_stop=True, interval=1, timeout=20)
             except Exception as e:
                 if "409" in str(e) or "Conflict" in str(e):
-                    print("⚠️ تعارض 409 - سيتم إعادة المحاولة بعد 30 ثانية...")
+                    print("⚠️ تعارض 409 - إعادة المحاولة بعد 30 ثانية")
                     time.sleep(30)
                     try:
                         requests.get(
@@ -436,9 +431,11 @@ def _bot_main():
     finally:
         stop_event.set()
         _release_lock()
-# ===== دالة بدء البوت الآمنة =====
+
+
+@st.cache_resource
 def start_telegram_bot():
-    """تشغيل البوت مرة واحدة فقط مع قفل ملف"""
+    """تشغيل البوت مرة واحدة فقط على مستوى العملية (يصلح لـ Streamlit Cloud)."""
     # 1) تنظيف القفل القديم إذا كان صاحبه قد مات
     if os.path.exists(_LOCK_FILE):
         try:
@@ -458,8 +455,9 @@ def start_telegram_bot():
     # 2) الحصول على القفل
     if not _acquire_lock():
         print("ℹ️ بوت Telegram يعمل بالفعل (قفل موجود).")
-        return
+        return True
 
     # 3) تشغيل البوت في خيط منفصل
     threading.Thread(target=_bot_main, daemon=True, name="InfoDocBot").start()
     print("✅ Bot thread started.")
+    return True
